@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apuestas — tiros por jugador</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Tiros por jugador</h1>
+  <p class="subtitulo">Últimos partidos de un futbolista en todas las competiciones — fuente: API pública de ESPN.</p>
+
+  <form class="controles" id="formulario">
+    <input type="search" id="entrada-nombre" placeholder="Nombre del jugador, ej: Lamine Yamal" autocomplete="off" required>
+    <select id="selector-partidos" aria-label="Número de partidos">
+      <option value="5" selected>Últimos 5</option>
+      <option value="10">Últimos 10</option>
+      <option value="15">Últimos 15</option>
+      <option value="20">Últimos 20</option>
+    </select>
+    <button type="submit" class="primario" id="boton-buscar">Buscar</button>
+  </form>
+
+  <div id="estado" class="estado" hidden></div>
+  <div id="candidatos" class="candidatos"></div>
+
+  <section id="vacio" class="tarjeta vacio">
+    <p>Busca un futbolista para ver sus tiros, tiros a puerta y promedios de los últimos partidos.</p>
+    <div class="sugerencias">
+      <button type="button">Lamine Yamal</button>
+      <button type="button">Kylian Mbappé</button>
+      <button type="button">Erling Haaland</button>
+      <button type="button">Vinícius Júnior</button>
+    </div>
+  </section>
+
+  <div id="resultados"></div>
+  <div id="tooltip" class="tooltip" role="tooltip"></div>
+</main>
+</body>
+</html>
