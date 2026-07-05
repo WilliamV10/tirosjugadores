@@ -12,10 +12,12 @@
   --borde:          rgba(11, 11, 11, 0.10);
   --fila-hover:     rgba(11, 11, 11, 0.03);
   --sombra:         0 1px 2px rgba(11, 11, 11, 0.04);
+  --sombra-alta:    0 6px 20px rgba(11, 11, 11, 0.08);
 
   /* Serie: rampa ordinal de un solo tono (azul) */
-  --acento:         #2a78d6;  /* tiros a puerta (paso oscuro) */
-  --serie-fuera:    #86b6ef;  /* tiros fuera / bloqueados (paso claro) */
+  --acento:         #2a78d6;  /* metrica principal (paso oscuro) */
+  --acento-fondo:   rgba(42, 120, 214, 0.10);
+  --serie-clara:    #86b6ef;  /* metrica secundaria (paso claro) */
   --pista-meter:    #cde2fb;  /* pista sin rellenar de los meters */
 
   /* Estado (resultado del partido) */
@@ -37,9 +39,11 @@
     --borde:        rgba(255, 255, 255, 0.10);
     --fila-hover:   rgba(255, 255, 255, 0.04);
     --sombra:       none;
+    --sombra-alta:  0 6px 20px rgba(0, 0, 0, 0.35);
 
     --acento:       #3987e5;
-    --serie-fuera:  #184f95;
+    --acento-fondo: rgba(57, 135, 229, 0.16);
+    --serie-clara:  #184f95;
     --pista-meter:  #0d366b;
 
     --bueno:        #0ca30c;
@@ -51,6 +55,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* el atributo hidden gana a cualquier display de clase */
 body {
   margin: 0;
   background: var(--plano);
@@ -59,13 +64,60 @@ body {
   font-size: 14px;
   line-height: 1.45;
 }
-main { max-width: 960px; margin: 0 auto; padding: 28px 16px 56px; }
-
-h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
-.subtitulo { color: var(--tinta-2); margin: 0 0 24px; }
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 56px; }
 
 /* ============================================================
-   Controles (una fila encima del contenido)
+   Hero + selector de modo
+   ============================================================ */
+.hero { margin-bottom: 20px; }
+.lema {
+  color: var(--acento); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 10px;
+}
+.hero-titulo { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 6px; }
+.subtitulo { color: var(--tinta-2); margin: 0; font-size: 15px; }
+.hero.compacto .hero-titulo, .hero.compacto .subtitulo { display: none; }
+.hero.compacto { margin-bottom: 14px; }
+
+.modos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px; margin-bottom: 22px;
+}
+.modo {
+  display: flex; align-items: flex-start; gap: 14px; text-align: left;
+  padding: 18px; border: 1px solid var(--borde); border-radius: 16px;
+  background: var(--superficie); color: var(--tinta); font: inherit; cursor: pointer;
+  box-shadow: var(--sombra);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.modo:hover { transform: translateY(-2px); border-color: var(--acento); box-shadow: var(--sombra-alta); }
+.modo:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.modo-icono {
+  flex: none; display: grid; place-items: center;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--acento-fondo); color: var(--acento);
+}
+.modo-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modo-titulo { font-weight: 600; font-size: 15px; }
+.modo-desc { color: var(--tinta-2); font-size: 12.5px; }
+.modo-flecha { margin-left: auto; color: var(--tinta-muted); font-size: 16px; align-self: center; }
+
+/* Modo compacto: los tres botones se vuelven pestañas tipo pastilla */
+.modos.compacto { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.modos.compacto .modo {
+  align-items: center; gap: 8px; padding: 7px 14px 7px 9px; border-radius: 999px;
+  box-shadow: none;
+}
+.modos.compacto .modo:hover { transform: none; box-shadow: none; }
+.modos.compacto .modo-desc, .modos.compacto .modo-flecha { display: none; }
+.modos.compacto .modo-icono { width: 26px; height: 26px; border-radius: 999px; }
+.modos.compacto .modo-icono svg { width: 14px; height: 14px; }
+.modos.compacto .modo-titulo { font-size: 13px; font-weight: 500; }
+.modos.compacto .modo.activo { border-color: var(--acento); background: var(--acento-fondo); }
+.modos.compacto .modo.activo .modo-titulo { font-weight: 600; }
+
+/* ============================================================
+   Controles
    ============================================================ */
 .controles { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .controles input[type="search"] {
@@ -97,30 +149,33 @@ h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
 @keyframes girar { to { transform: rotate(360deg); } }
 
 /* ============================================================
-   Estado vacio inicial
-   ============================================================ */
-.vacio { text-align: center; padding: 40px 20px; }
-.vacio p { color: var(--tinta-2); margin: 0 0 14px; }
-.sugerencias { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-.sugerencias button {
-  padding: 7px 14px; border: 1px solid var(--borde); border-radius: 999px;
-  background: var(--superficie); color: var(--tinta-2); font: inherit; font-size: 13px;
-  cursor: pointer;
-}
-.sugerencias button:hover { border-color: var(--acento); color: var(--tinta); }
-
-/* ============================================================
    Lista de candidatos
    ============================================================ */
 .candidatos { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
 .candidatos button {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding: 12px 16px; border: 1px solid var(--borde); border-radius: 12px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px 10px 10px; border: 1px solid var(--borde); border-radius: 12px;
   background: var(--superficie); color: var(--tinta); font: inherit;
   cursor: pointer; text-align: left; box-shadow: var(--sombra);
 }
 .candidatos button:hover { border-color: var(--acento); }
-.candidatos .liga { color: var(--tinta-muted); }
+.candidatos .cand-texto { display: flex; flex-direction: column; min-width: 0; }
+.candidatos .sub { color: var(--tinta-muted); font-size: 12px; }
+.candidatos .liga { color: var(--tinta-muted); margin-left: auto; text-align: right; }
+
+/* ============================================================
+   Avatares (foto del jugador / escudo del equipo)
+   ============================================================ */
+.avatar {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--acento-fondo);
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar.escudo { border-radius: 12px; }
+.avatar.escudo img { object-fit: contain; padding: 4px; }
+.avatar .monograma { color: var(--acento); font-weight: 700; font-size: 18px; }
+.avatar.grande { width: 56px; height: 56px; }
 
 /* ============================================================
    Tarjetas
@@ -136,14 +191,19 @@ h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
 }
 .tarjeta h2 { font-size: 14px; font-weight: 600; margin: 0; }
 
-/* ---------- Cabecera del jugador ---------- */
-.jugador-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-.jugador-nombre { font-size: 18px; font-weight: 600; }
-.jugador-desc { color: var(--tinta-muted); font-size: 13px; margin-top: 1px; }
-.rapidos { display: flex; gap: 20px; }
+/* ---------- Cabecera del jugador / equipo ---------- */
+.ficha { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ficha-nombre { font-size: 18px; font-weight: 600; }
+.ficha-desc { color: var(--tinta-muted); font-size: 13px; margin-top: 1px; }
+.ficha-derecha { margin-left: auto; display: flex; gap: 20px; align-items: center; }
 .rapido { text-align: right; }
 .rapido .rapido-valor { font-size: 20px; font-weight: 600; line-height: 1.1; }
 .rapido .rapido-etiqueta { color: var(--tinta-muted); font-size: 12px; }
+
+/* Racha de forma: ultimos 5 resultados como fichas */
+.forma { display: flex; gap: 4px; align-items: center; }
+.forma .chip { min-width: 24px; padding: 3px 0; }
+.forma-etiqueta { color: var(--tinta-muted); font-size: 11px; margin-right: 6px; }
 
 /* ============================================================
    Tiles de estadisticas
@@ -167,10 +227,7 @@ h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
 .leyenda .muestra { width: 10px; height: 10px; border-radius: 3px; }
 
 .grafico { position: relative; height: 220px; margin-left: 28px; }
-.gridline {
-  position: absolute; left: 0; right: 0; height: 1px;
-  background: var(--hairline);
-}
+.gridline { position: absolute; left: 0; right: 0; height: 1px; background: var(--hairline); }
 .gridline.base { background: var(--baseline); }
 .gridline .tick {
   position: absolute; left: -28px; top: -8px; width: 22px;
@@ -193,9 +250,9 @@ h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
 .columna { display: flex; flex-direction: column; align-items: center; flex: 1 1 0; max-width: 56px; height: 100%; position: relative; }
 .pila { width: 100%; max-width: 24px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
 .segmento { width: 100%; }
-.seg-fuera  { background: var(--serie-fuera); border-radius: 4px 4px 0 0; margin-bottom: 2px; } /* hueco de 2px (superficie) sobre el segmento inferior */
-.seg-puerta { background: var(--acento); }
-.seg-puerta.tope { border-radius: 4px 4px 0 0; } /* redondeo solo en el extremo del dato */
+.seg-claro  { background: var(--serie-clara); border-radius: 4px 4px 0 0; margin-bottom: 2px; } /* hueco de 2px (superficie) sobre el segmento inferior */
+.seg-azul { background: var(--acento); }
+.seg-azul.tope { border-radius: 4px 4px 0 0; } /* redondeo solo en el extremo del dato */
 .hit { position: absolute; inset: 0; cursor: pointer; border-radius: 6px; }
 .hit:hover, .hit:focus-visible { background: rgba(137, 135, 129, 0.12); outline: none; }
 .etiqueta-x {
@@ -238,6 +295,7 @@ tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.destacado { font-weight: 600; }
 td.tenue { color: var(--tinta-muted); }
+td.num .cero { color: var(--tinta-muted); }
 
 /* Chip de resultado: la letra lleva el significado, el color lo refuerza */
 .chip {
@@ -248,10 +306,25 @@ td.tenue { color: var(--tinta-muted); }
 .chip-e { background: var(--fila-hover); color: var(--tinta-2); }
 .chip-d { background: var(--malo-fondo); color: var(--malo); }
 
-/* Mini-barra dentro de la celda de tiros */
+/* Sede: casa / fuera */
+.sede {
+  display: inline-block; min-width: 20px; text-align: center;
+  padding: 1px 5px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  background: var(--fila-hover); color: var(--tinta-muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+/* Mini-barra dentro de una celda numerica */
 .celda-barra { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .celda-barra .pista {
   width: 48px; height: 4px; border-radius: 999px; background: var(--pista-meter);
   overflow: hidden; flex: none;
 }
 .celda-barra .pista .relleno { height: 100%; border-radius: 999px; background: var(--acento); }
+
+.nota { color: var(--tinta-muted); font-size: 12px; margin: 10px 2px 0; }
+
+/* ============================================================
+   Pie
+   ============================================================ */
+.pie { color: var(--tinta-muted); font-size: 12px; margin-top: 28px; text-align: center; }

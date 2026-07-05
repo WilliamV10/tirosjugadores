@@ -1,7 +1,19 @@
-# Apuestas — estadísticas de los últimos partidos de un jugador
+# Apuestas — estadísticas de jugadores y equipos
 
-Herramienta para consultar los **últimos N partidos de cualquier futbolista** con sus
-estadísticas por partido: **tiros, tiros a puerta**, goles, asistencias, faltas y tarjetas.
+Herramienta con **tres modos de consulta** pensados para mercados de apuestas:
+
+1. **Tiros por jugador** — tiros y tiros a puerta de un futbolista, partido a partido.
+2. **Partidos de un equipo** — resultados recientes, forma, goles a favor/en contra y porterías a cero.
+3. **Córners por partido** — córners que saca y concede un equipo en cada partido.
+
+Los modos de equipo funcionan con **clubes y con selecciones nacionales** (misma
+consulta, mismo peso): la app detecta que la "liga por defecto" del equipo es una
+competición de selecciones (`fifa.world`, `uefa.euro`…) y entonces consulta Mundial,
+amistosos, Eurocopa, Nations League, Copa América, Copa Oro y eliminatorias en vez de
+liga + copas + Europa. Como el buscador de ESPN solo entiende inglés, hay un mapa de
+alias español→inglés ("españa"→"spain", "alemania"→"germany"…), y la búsqueda filtra
+otros deportes (el buscador también devuelve equipos de rugby o cricket con el mismo
+nombre).
 
 ## ¿Por qué ESPN y no SofaScore?
 
@@ -16,8 +28,19 @@ exactamente los datos que se necesitan. Endpoints usados:
 
 | Para qué | Endpoint |
 |---|---|
-| Buscar jugador por nombre | `https://site.web.api.espn.com/apis/search/v2?query=NOMBRE&limit=10` |
-| Partidos + estadísticas | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/ID/gamelog` |
+| Buscar jugador o equipo | `https://site.web.api.espn.com/apis/search/v2?query=NOMBRE&limit=10` (grupos `player` y `team`) |
+| Partidos + estadísticas de un jugador | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/ID/gamelog` |
+| Calendario/resultados de un equipo | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/teams/ID/schedule?season=AÑO` |
+| Córners de un partido | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/summary?event=ID` (`wonCorners` en `boxscore.teams`) |
+
+Notas de los endpoints de equipo:
+
+- El calendario se pide **por liga y por temporada** (`season` = año de inicio). La app
+  consulta en paralelo la liga del equipo + copas nacionales + competiciones europeas,
+  en la temporada actual y la anterior, y fusiona los partidos ya jugados.
+- Los córners salen del *boxscore* del resumen de cada partido (una petición por
+  partido, con caché). En amistosos y rondas menores ESPN no publica estadísticas:
+  esos partidos se muestran con «–» y no cuentan en las medias.
 
 El gamelog trae por cada partido: `totalGoals, goalAssists, totalShots, shotsOnTarget,
 foulsCommitted, foulsSuffered, offsides, yellowCards, redCards`, más fecha, rival,
@@ -33,24 +56,32 @@ por fecha.
 
 ## Versión web (index.html + styles.css + app.js)
 
-La misma herramienta como página web, **sin servidor ni dependencias**: tres archivos
+La herramienta como página web, **sin servidor ni dependencias**: tres archivos
 estáticos — `index.html` (estructura), `styles.css` (diseño, con modo claro/oscuro
 automático) y `app.js` (lógica). Abre `index.html` con doble clic (o sube la carpeta
 gratis a GitHub Pages/Netlify). Funciona porque la API de ESPN envía
 `Access-Control-Allow-Origin: *`, así que el navegador puede llamarla directamente sin
 problema de CORS.
 
-Incluye buscador de jugador con sugerencias, selector de 5/10/15/20 partidos, cabecera
-del jugador con goles/asistencias, tiles con los promedios (con barra de proporción en
-los conteos), gráfico de columnas apiladas de tiros por partido (azul intenso = a
-puerta, azul claro = fuera/bloqueados, con línea de media y tooltip), y la tabla
-completa con chips de resultado (V/E/D) y mini-barras en la columna de tiros.
+La portada muestra **tres tarjetas de modo** (tiros por jugador / partidos de un equipo /
+córners por partido); al elegir una se convierten en pestañas y aparece el buscador.
+Cada vista incluye: cabecera con foto del jugador o escudo del equipo (con inicial de
+reserva si la imagen no carga), tiles de promedios con barras de proporción, gráfico de
+columnas apiladas con línea de media y tooltip, y tabla completa con chips de resultado
+V/E/D, sede (casa/fuera), ceros atenuados y mini-barras en la columna clave. En modo
+equipo la cabecera lleva además la **racha de forma** de los últimos 5 partidos.
 
 El código de `app.js` está separado en módulos para poder ampliarlo:
-`CONFIG` (competiciones y URL base), `Api` (llamadas a ESPN), `Logica` (parseo y
+`CONFIG` (competiciones y URLs), `Api` (llamadas a ESPN), `Logica` (parseo y
 combinación, funciones puras sin DOM), `Formato` (fechas/números/resultados es-ES),
-`UI` (render) y `App` (controlador). Para añadir una estadística nueva: agrégala en
-`Logica.parsearPartidos` y luego pínchala en `UI.tiles` o en `UI.tarjetaTabla`.
+`UI` (render, con un constructor genérico de gráfico apilado que comparten las tres
+vistas) y `App` (controlador con caché: cambiar el número de partidos no refetchea, y
+los córners ya descargados no se vuelven a pedir).
+
+**Sobre la columna TA (tarjetas amarillas):** no está rota — simplemente los
+delanteros ven pocas tarjetas, así que en los últimos 5 partidos suele ser 0 real.
+Se verificó con jugadores con muchas amarillas (aparecen los 1 correctamente); por eso
+ahora los ceros se pintan atenuados, para que se distinga "cero de verdad" de un vistazo.
 
 ## Uso (Python)
 

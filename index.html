@@ -3,17 +3,69 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Apuestas — tiros por jugador</title>
+<title>Apuestas — jugadores y equipos</title>
 <link rel="stylesheet" href="styles.css">
 <script src="app.js" defer></script>
 </head>
 <body>
 <main>
-  <h1>Tiros por jugador</h1>
-  <p class="subtitulo">Últimos partidos de un futbolista en todas las competiciones — fuente: API pública de ESPN.</p>
+  <header class="hero" id="hero">
+    <p class="lema">Análisis para apuestas · datos de ESPN</p>
+    <h1 class="hero-titulo">¿Qué quieres consultar?</h1>
+    <p class="subtitulo">Estadísticas reales de los últimos partidos, en todas las competiciones.</p>
+  </header>
 
-  <form class="controles" id="formulario">
-    <input type="search" id="entrada-nombre" placeholder="Nombre del jugador, ej: Lamine Yamal" autocomplete="off" required>
+  <nav class="modos" id="modos" aria-label="Tipo de consulta">
+    <button type="button" class="modo" data-modo="tiros">
+      <span class="modo-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="9"></circle>
+          <circle cx="12" cy="12" r="5"></circle>
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"></circle>
+        </svg>
+      </span>
+      <span class="modo-texto">
+        <span class="modo-titulo">Tiros por jugador</span>
+        <span class="modo-desc">Tiros y tiros a puerta de un futbolista, partido a partido.</span>
+      </span>
+      <span class="modo-flecha" aria-hidden="true">→</span>
+    </button>
+
+    <button type="button" class="modo" data-modo="partidos">
+      <span class="modo-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+          <line x1="8" y1="3" x2="8" y2="7"></line>
+          <line x1="16" y1="3" x2="16" y2="7"></line>
+          <path d="M8.5 15.5l2.5 2.5 4.5-4.5"></path>
+        </svg>
+      </span>
+      <span class="modo-texto">
+        <span class="modo-titulo">Partidos de un equipo</span>
+        <span class="modo-desc">Resultados, forma y goles de un club o una selección.</span>
+      </span>
+      <span class="modo-flecha" aria-hidden="true">→</span>
+    </button>
+
+    <button type="button" class="modo" data-modo="corners">
+      <span class="modo-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="6" y1="21" x2="6" y2="4"></line>
+          <path d="M6 4l9 2.5L6 9.5"></path>
+          <path d="M13 21a7 7 0 0 0-7-7"></path>
+        </svg>
+      </span>
+      <span class="modo-texto">
+        <span class="modo-titulo">Córners por partido</span>
+        <span class="modo-desc">Córners a favor y concedidos, de clubes y selecciones.</span>
+      </span>
+      <span class="modo-flecha" aria-hidden="true">→</span>
+    </button>
+  </nav>
+
+  <form class="controles" id="formulario" hidden>
+    <input type="search" id="entrada-nombre" placeholder="Nombre del jugador" autocomplete="off" required>
     <select id="selector-partidos" aria-label="Número de partidos">
       <option value="5" selected>Últimos 5</option>
       <option value="10">Últimos 10</option>
@@ -25,19 +77,10 @@
 
   <div id="estado" class="estado" hidden></div>
   <div id="candidatos" class="candidatos"></div>
-
-  <section id="vacio" class="tarjeta vacio">
-    <p>Busca un futbolista para ver sus tiros, tiros a puerta y promedios de los últimos partidos.</p>
-    <div class="sugerencias">
-      <button type="button">Lamine Yamal</button>
-      <button type="button">Kylian Mbappé</button>
-      <button type="button">Erling Haaland</button>
-      <button type="button">Vinícius Júnior</button>
-    </div>
-  </section>
-
   <div id="resultados"></div>
   <div id="tooltip" class="tooltip" role="tooltip"></div>
+
+  <footer class="pie">Fuente: API pública de ESPN · los amistosos y rondas menores pueden no incluir córners.</footer>
 </main>
 </body>
 </html>
