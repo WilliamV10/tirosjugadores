@@ -43,6 +43,7 @@ const UI = {
     boton: () => document.getElementById("boton-buscar"),
     ejemplos: () => document.getElementById("ejemplos"),
     estado: () => document.getElementById("estado"),
+    estadoBase: () => document.getElementById("estado-base"),
     candidatos: () => document.getElementById("candidatos"),
     resultados: () => document.getElementById("resultados"),
     tooltip: () => document.getElementById("tooltip"),
@@ -61,6 +62,23 @@ const UI = {
   limpiar() {
     this.refs.candidatos().replaceChildren();
     this.refs.resultados().replaceChildren();
+  },
+
+  /** Qué hay guardado en la base local, en el pie de la página. */
+  mostrarBase({ activa, partidos = 0, equipos = 0, usados = 0 }) {
+    const nodo = this.refs.estadoBase();
+    if (!nodo) return;
+    if (!activa) {
+      nodo.textContent = "Base local no disponible en este navegador — se consulta siempre a ESPN.";
+      return;
+    }
+    if (!partidos) {
+      nodo.textContent = "Base local activa · vacía todavía.";
+      return;
+    }
+    const mb = usados / 1024 / 1024;
+    const tamaño = mb >= 0.1 ? `${mb.toFixed(1)} MB` : `${Math.round(usados / 1024)} KB`;
+    nodo.textContent = `Base local: ${partidos} partidos y ${equipos} equipos guardados (${tamaño}).`;
   },
 
   /** Bloques grises mientras llegan los datos: la página no salta al cargar. */

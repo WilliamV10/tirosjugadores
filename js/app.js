@@ -20,6 +20,23 @@ const App = {
       this.buscar(UI.refs.entrada().value.trim());
     });
     UI.refs.selector().addEventListener("change", () => this.cambiarCantidad());
+    this.revisarBase();
+  },
+
+  /** Estado de la base local: si está disponible y qué guarda. */
+  async revisarBase() {
+    if (!(await BD.lista())) {
+      UI.mostrarBase({ activa: false });
+      return;
+    }
+    BD.pedirPersistencia(); // que el navegador no borre los datos sin avisar
+    const { inventario, espacio } = await Repositorio.resumenAlmacen();
+    UI.mostrarBase({
+      activa: true,
+      partidos: inventario.partidos,
+      equipos: inventario.equipos,
+      usados: espacio.usados,
+    });
   },
 
   seleccionarModo(modo) {
@@ -129,7 +146,8 @@ const App = {
     UI.mostrarEsqueleto();
     UI.mostrarEstado(`Descargando partidos de ${candidato.displayName}…`, { cargando: true });
     try {
-      const { resultado: filas, peticiones, fallos } = await this.midiendo(() => Datos.partidosDeJugador(id));
+      const jugador = { id, nombre: candidato.displayName, idEquipo: null };
+      const { resultado: filas, peticiones, fallos } = await this.midiendo(() => Datos.partidosDeJugador(jugador));
       if (!filas) {
         this.avisarVacio(fallos, "ESPN no tiene partidos registrados para este jugador.");
         return;
@@ -266,10 +284,11 @@ const App = {
   /** Deja claro lo que costó: peticiones reales y cuántas se ahorraron. */
   anunciarCoste(partidos, peticiones) {
     if (!peticiones) {
-      UI.mostrarEstado(`${partidos} partidos servidos desde la caché, sin pedir nada a ESPN.`);
-      return;
+      UI.mostrarEstado(`${partidos} partidos servidos desde la base local, sin pedir nada a ESPN.`);
+    } else {
+      UI.mostrarEstado(`${partidos} partidos con ${peticiones} ${peticiones === 1 ? "petición" : "peticiones"} a ESPN.`);
     }
-    UI.mostrarEstado(`${partidos} partidos con ${peticiones} ${peticiones === 1 ? "petición" : "peticiones"} a ESPN.`);
+    this.revisarBase(); // el pie refleja lo que acaba de entrar en la base
   },
 
   /* ---------- Cambio de cantidad ---------- */

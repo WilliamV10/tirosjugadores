@@ -25,7 +25,9 @@ const CONFIG = {
   // un equipo mexicano ni Concachampions a uno español
   ligasContinentales: {
     uefa: ["uefa.champions", "uefa.europa", "uefa.europa.conf", "uefa.super_cup"],
-    concacaf: ["concacaf.champions", "concacaf.leagues_cup"],
+    // OJO: la Leagues Cup lleva punto, no guion bajo. Con "leagues_cup" ESPN
+    // responde 400 y los partidos de esa competición no aparecían.
+    concacaf: ["concacaf.champions", "concacaf.leagues.cup"],
     conmebol: ["conmebol.libertadores", "conmebol.sudamericana"],
   },
 
@@ -39,16 +41,17 @@ const CONFIG = {
   },
 
   // Copas nacionales por prefijo de la liga por defecto ("esp.1" -> "esp").
-  // Una liga inexistente devuelve error y se ignora (y se apunta como muerta).
+  // Todos comprobados uno a uno contra ESPN: los que respondían 400 se han
+  // corregido o retirado, porque cada uno costaba una petición inútil.
+  // Portugal no está: ESPN no publica sus copas con ningún identificador
+  // conocido. La Copa MX tampoco: no se juega desde 2020.
   copasPorPais: {
     esp: ["esp.copa_del_rey", "esp.super_cup"],
     eng: ["eng.fa", "eng.league_cup"],
     ita: ["ita.coppa_italia", "ita.super_cup"],
     ger: ["ger.dfb_pokal", "ger.super_cup"],
     fra: ["fra.coupe_de_france", "fra.super_cup"],
-    por: ["por.taca_de_portugal", "por.liga_cup"],
-    ned: ["ned.knvb_cup"],
-    mex: ["mex.copa_mx"],
+    ned: ["ned.cup"],
     arg: ["arg.copa"],
     bra: ["bra.copa_do_brazil"],
   },

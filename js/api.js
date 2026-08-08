@@ -77,6 +77,13 @@ const Api = {
     return this._jsonOpcional(url, liga);
   },
 
+  /** Resumen de un partido: eventos (goles, tarjetas, cambios), alineaciones
+      y estadísticas de cada jugador. Una petición por partido. */
+  resumenPartido(liga, idEvento) {
+    const url = `${CONFIG.sitioBase}/apis/site/v2/sports/soccer/${encodeURIComponent(liga)}/summary?event=${idEvento}`;
+    return this._jsonOpcional(url);
+  },
+
   /** Marcador de una liga en un rango "YYYYMMDD-YYYYMMDD".
       Devuelve hasta 300 partidos CON estadisticas (corners, tiros, posesion)
       en una sola peticion: es la via barata, en vez de pedir partido a partido. */
@@ -99,9 +106,11 @@ const Api = {
       Cache.peticiones++;
       const respuesta = await fetch(url);
       if (!respuesta.ok) {
-        if (respuesta.status === 404) {
+        // 400 = identificador de competición inválido, 404 = no hay nada ahí.
+        // En ambos casos no tiene sentido reintentar: se apunta y no se repite.
+        if (respuesta.status === 400 || respuesta.status === 404) {
           if (liga) Cache.ligasMuertas.add(liga);
-          Cache.guardar(url, null); // no existe: la respuesta vacia es definitiva
+          Cache.guardar(url, null);
         } else {
           Cache.fallos++; // 403/429/500: puede volver a funcionar, no se cachea
         }
