@@ -256,16 +256,20 @@ const App = {
     }
 
     UI.mostrarEsqueleto();
-    const { resultado, peticiones, fallos } = await this.midiendo(() =>
-      Datos.partidosDeEquipos([ladoA, ladoB], {
-        minimo: this.minimoPedido(),
-        alAvanzar: (tramo) => UI.mostrarEstado(
-          `Comparando ${equipoA.displayName} y ${equipoB.displayName}… (tramo ${tramo})`,
-          { cargando: true },
-        ),
-      })
-    );
-    const [filasA, filasB] = resultado.listas;
+    const { resultado, peticiones, fallos } = await this.midiendo(async () => {
+      const [recientes, cruces] = await Promise.all([
+        Datos.partidosDeEquipos([ladoA, ladoB], {
+          minimo: this.minimoPedido(),
+          alAvanzar: (tramo) => UI.mostrarEstado(
+            `Comparando ${equipoA.displayName} y ${equipoB.displayName}… (forma reciente)`,
+            { cargando: true },
+          ),
+        }),
+        Datos.enfrentamientosHistoricos(ladoA, ladoB, { temporadas: 6 }),
+      ]);
+      return { recientes, cruces };
+    });
+    const [filasA, filasB] = resultado.recientes.listas;
     if (!filasA.length || !filasB.length) {
       const vacio = !filasA.length ? equipoA.displayName : equipoB.displayName;
       this.avisarVacio(fallos, `ESPN no tiene partidos recientes de ${vacio}.`);
@@ -275,7 +279,8 @@ const App = {
     this.estado.duelo = {
       a: { ...ladoA, filas: filasA },
       b: { ...ladoB, filas: filasB },
-      tramosUsados: resultado.tramosUsados,
+      cruces: resultado.cruces,
+      tramosUsados: resultado.recientes.tramosUsados,
     };
     this.anunciarCoste(filasA.length + filasB.length, peticiones);
     this.render();
@@ -348,7 +353,7 @@ const App = {
         // se buscan ahí, no solo entre los partidos mostrados
         return { ...lado, filas, filasTodas: lado.filas, perfil: Logica.perfil(filas) };
       };
-      Vistas.comparacion(conPerfil(duelo.a), conPerfil(duelo.b));
+      Vistas.comparacion(conPerfil(duelo.a), conPerfil(duelo.b), duelo.cruces || []);
     }
   },
 };

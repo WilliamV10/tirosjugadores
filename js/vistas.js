@@ -230,10 +230,9 @@ const Vistas = {
      Vista 4 — comparativa cara a cara
      lado = { equipo, id, filas, filasTodas, perfil }
      ============================================================ */
-  comparacion(ladoA, ladoB) {
+  comparacion(ladoA, ladoB, cruces = []) {
     const metricas = Logica.metricasComparadas(ladoA.perfil, ladoB.perfil);
     const ganadas = (cual) => metricas.filter((m) => m.gana === cual).length;
-    const cruces = Logica.enfrentamientos(ladoA.filasTodas, ladoB.id);
 
     this.pintar(
       this.duelo(ladoA, ladoB, ganadas("a"), ganadas("b")),
@@ -312,22 +311,40 @@ const Vistas = {
 
   /** Historial directo entre los dos equipos (vacio si no se han cruzado). */
   historial(ladoA, cruces) {
-    if (!cruces.length) return [];
+    if (!cruces.length) {
+      return UI.tarjeta("Enfrentamientos directos", UI.el("div", { class: "h2h-vacio" }, [
+        UI.el("span", { class: "h2h-vacio-icono", "aria-hidden": "true" }, ["↔"]),
+        UI.el("div", {}, [
+          UI.el("strong", {}, ["Sin cruces en el historial reciente"]),
+          UI.el("p", {}, ["No se encontraron partidos entre ambos equipos durante las últimas 6 temporadas consultadas."]),
+        ]),
+      ]));
+    }
+    const victorias = cruces.filter((p) => p.resultado === "W").length;
+    const empates = cruces.filter((p) => p.resultado === "D").length;
+    const derrotas = cruces.filter((p) => p.resultado === "L").length;
+    const golesFavor = cruces.reduce((total, p) => total + p.golesFavor, 0);
+    const golesContra = cruces.reduce((total, p) => total + p.golesContra, 0);
+    const resumen = UI.el("div", { class: "h2h-resumen" }, [
+      UI.el("div", { class: "h2h-dato" }, [UI.el("strong", {}, [String(cruces.length)]), UI.el("span", {}, ["partidos"])]),
+      UI.el("div", { class: "h2h-dato victoria" }, [UI.el("strong", {}, [String(victorias)]), UI.el("span", {}, ["victorias"])]),
+      UI.el("div", { class: "h2h-dato" }, [UI.el("strong", {}, [String(empates)]), UI.el("span", {}, ["empates"])]),
+      UI.el("div", { class: "h2h-dato derrota" }, [UI.el("strong", {}, [String(derrotas)]), UI.el("span", {}, ["derrotas"])]),
+      UI.el("div", { class: "h2h-dato goles" }, [UI.el("strong", {}, [`${golesFavor}–${golesContra}`]), UI.el("span", {}, ["goles"])]),
+    ]);
     const filas = cruces.map((p) => UI.el("tr", {}, [
       UI.el("td", { class: "tenue" }, [Formato.fechaLarga(p.fecha)]),
       UI.el("td", { class: "tenue" }, [p.competicion]),
       UI.celdaSede(p.enCasa),
       UI.celdaResultado(p.resultado),
       UI.el("td", { class: "destacado" }, [`${p.golesFavor}-${p.golesContra}`]),
-      UI.el("td", { class: "num" }, [p.cornersFavor === null ? "–" : `${p.cornersFavor}-${p.cornersContra}`]),
     ]));
 
     return UI.tarjeta(
       `Enfrentamientos directos (${cruces.length})`,
-      UI.tabla(
-        ["Fecha", "Competición", "Sede", "Res", "Marcador", { texto: "Córners", num: true }],
-        filas,
-      ),
+      [resumen, UI.tabla(
+        ["Fecha", "Competición", "Sede", "Res", "Marcador"], filas,
+      )],
       { derecha: UI.el("span", { class: "duelo-pie" }, [`vistos desde ${ladoA.equipo.displayName}`]) },
     );
   },

@@ -98,7 +98,9 @@ const UI = {
     this.refs.hero().classList.add("compacto");
     this.refs.modos().classList.add("compacto");
     for (const boton of this.refs.modos().querySelectorAll(".modo")) {
-      boton.classList.toggle("activo", boton.dataset.modo === modo);
+      const activo = boton.dataset.modo === modo;
+      boton.classList.toggle("activo", activo);
+      boton.setAttribute("aria-pressed", String(activo));
     }
     this.refs.formulario().hidden = false;
     this.refs.entrada().placeholder = ajustes.placeholder;
@@ -333,7 +335,9 @@ const UI = {
       this.conectarTooltip(hit, fila.tooltip);
 
       const ocultarFecha = saltarEtiquetas && (cronologico.length - 1 - i) % 2 !== 0;
+      const total = fila.azul + fila.claro;
       columnas.append(this.el("div", { class: "columna" }, [
+        this.el("span", { class: "valor-columna", style: `bottom:calc(${(total / techo) * 100}% + 7px)` }, [String(total)]),
         pila,
         hit,
         this.el("div", { class: ocultarFecha ? "etiqueta-x oculta" : "etiqueta-x" }, [Formato.fechaCorta(fila.fecha)]),

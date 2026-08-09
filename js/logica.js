@@ -265,6 +265,38 @@ const Logica = {
       .map((e) => this.filaDesdeEstadistica(e));
   },
 
+  /** Convierte el calendario anual de ESPN en filas ligeras vistas desde un
+      equipo. No trae estadisticas avanzadas, pero basta para el historial H2H. */
+  parsearCalendario(datos, idEquipo) {
+    const propioId = String(idEquipo);
+    const filas = [];
+    for (const evento of datos?.events || []) {
+      const partido = evento.competitions?.[0];
+      if (!partido?.status?.type?.completed) continue;
+      const competidores = partido.competitors || [];
+      const propio = competidores.find((c) => String(c.team?.id) === propioId);
+      const rival = competidores.find((c) => String(c.team?.id) !== propioId);
+      if (!propio?.team || !rival?.team) continue;
+      const golesFavor = Number(propio.score?.value ?? propio.score);
+      const golesContra = Number(rival.score?.value ?? rival.score);
+      if (!Number.isFinite(golesFavor) || !Number.isFinite(golesContra)) continue;
+      filas.push({
+        eventId: String(evento.id),
+        fecha: new Date(evento.date),
+        competicion: evento.league?.abbreviation || evento.league?.name || "",
+        rival: rival.team.displayName || rival.team.name || "?",
+        idRival: String(rival.team.id),
+        enCasa: propio.homeAway === "home",
+        golesFavor,
+        golesContra,
+        resultado: golesFavor > golesContra ? "W" : golesFavor < golesContra ? "L" : "D",
+        cornersFavor: null,
+        cornersContra: null,
+      });
+    }
+    return filas;
+  },
+
   /** Eventos, jugadores y actuaciones del resumen de un partido.
       ESPN no publica remates individuales (ni coordenadas ni xG): los tiros
       solo existen como total por equipo y por jugador. */

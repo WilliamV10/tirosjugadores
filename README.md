@@ -1,10 +1,20 @@
 # Apuestas — estadísticas de jugadores y equipos
 
-Herramienta con **tres modos de consulta** pensados para mercados de apuestas:
+Herramienta con **cuatro modos de consulta** pensados para mercados de apuestas:
 
 1. **Tiros por jugador** — tiros y tiros a puerta de un futbolista, partido a partido.
 2. **Partidos de un equipo** — resultados recientes, forma, goles a favor/en contra y porterías a cero.
 3. **Córners por partido** — córners que saca y concede un equipo en cada partido.
+4. **Comparar dos equipos** — se escribe «América vs Tigres» y se enfrentan sus promedios
+   (puntos, goles, córners, tiros, tiros a puerta y posesión) en barras cara a cara, más el
+   historial de enfrentamientos directos.
+
+> **Sobre los goles esperados (xG):** la API pública de ESPN **no los publica** — se
+> comprobó buscando `expectedGoals`/`xG` en el resumen de partido, en el boxscore, en las
+> estadísticas de jugador y en el marcador. No se inventa un xG estimado: la comparativa
+> usa **tiros, tiros a puerta y posesión**, que son los datos reales de dominio que sí
+> devuelve ESPN. Para xG de verdad haría falta otra fuente (FBref/Understat), que sí
+> bloquean el acceso desde el navegador.
 
 Los modos de equipo funcionan con **clubes y con selecciones nacionales** (misma
 consulta, mismo peso): la app detecta que la "liga por defecto" del equipo es una
@@ -23,24 +33,59 @@ petición que no venga de un navegador real. Para saltarse eso harían falta her
 tipo `cloudscraper` o un navegador automatizado (Playwright/Selenium), que son frágiles
 y pueden dejar de funcionar en cualquier momento.
 
-En cambio, **ESPN tiene una API pública sin bloqueo** que devuelve JSON limpio con
-exactamente los datos que se necesitan. Endpoints usados:
+En cambio, **ESPN expone endpoints JSON públicos** que normalmente permiten la consulta
+directa desde el navegador, aunque puede aplicar límites temporales por IP/User-Agent.
+Endpoints usados:
 
 | Para qué | Endpoint |
 |---|---|
 | Buscar jugador o equipo | `https://site.web.api.espn.com/apis/search/v2?query=NOMBRE&limit=10` (grupos `player` y `team`) |
 | Partidos + estadísticas de un jugador | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/ID/gamelog` |
-| Calendario/resultados de un equipo | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/teams/ID/schedule?season=AÑO` |
-| Córners de un partido | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/summary?event=ID` (`wonCorners` en `boxscore.teams`) |
+| **Partidos de equipo con estadísticas** | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/scoreboard?dates=YYYYMMDD-YYYYMMDD&limit=300` |
+| **Historial anual de un equipo** | `https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/ID/schedule?season=YYYY` |
 
-Notas de los endpoints de equipo:
+### El truco para no hacer tantas peticiones
 
-- El calendario se pide **por liga y por temporada** (`season` = año de inicio). La app
-  consulta en paralelo la liga del equipo + copas nacionales + competiciones europeas,
-  en la temporada actual y la anterior, y fusiona los partidos ya jugados.
-- Los córners salen del *boxscore* del resumen de cada partido (una petición por
-  partido, con caché). En amistosos y rondas menores ESPN no publica estadísticas:
-  esos partidos se muestran con «–» y no cuentan en las medias.
+El **marcador** (`scoreboard`) es la clave: devuelve hasta **300 partidos con las
+estadísticas de ambos equipos ya incluidas** —`wonCorners`, `totalShots`,
+`shotsOnTarget`, `possessionPct`, `foulsCommitted`— en **una sola petición**. Antes los
+córners se pedían con un `summary` por partido; ahora salen gratis con los goles.
+
+Detalles medidos:
+
+- El parámetro `limit` es obligatorio para pasar de 100 partidos, y el tope real es 300;
+  si el rango de fechas es muy ancho, ESPN **corta por el principio y se pierden los
+  partidos recientes**. Por eso se pide en **ventanas de 4 meses**, avanzando sólo hasta
+  reunir la cantidad solicitada, y luego se fusionan los resultados sin duplicados.
+- Un marcador vale para **todos los equipos de esa liga a la vez**: comparar dos rivales
+  de la misma liga cuesta lo mismo que consultar uno solo para goles, córners, tiros y
+  posesión. El historial H2H se obtiene aparte con seis calendarios anuales.
+- Las ligas se eligen por **confederación**: a un equipo mexicano se le piden Concacaf
+  Champions y Leagues Cup, no la Champions de Europa. Antes se pedían siempre las
+  europeas, así que los partidos de Concachampions ni aparecían.
+- En amistosos y rondas menores ESPN no publica estadísticas: esos partidos se muestran
+  con «–» y no cuentan en las medias (la comparativa además excluye los amistosos).
+
+### Enfrentamientos directos sin descargar seis años de ligas
+
+El historial H2H usa `schedule` con el slug especial **`all`**. Una petición devuelve
+todo el calendario del equipo para una temporada: liga, copas, torneos continentales y
+amistosos. La app pide seis temporadas y filtra localmente los eventos cuyo rival tenga
+el segundo id seleccionado.
+
+Esto reemplaza una solución mucho más cara: seis años con `scoreboard` habrían sido 18
+ventanas de cuatro meses multiplicadas por cada liga y copa, fácilmente más de 100
+peticiones. Con `schedule` el coste es fijo: **6 peticiones**. En la prueba
+América–Tigres se encontraron **15 cruces en seis temporadas**.
+
+El calendario trae resultados, sede y competición, pero no córners ni tiros. Por eso
+el comparador separa deliberadamente:
+
+- **forma y promedios**, calculados con los últimos 5/10/15/20 partidos y `scoreboard`;
+- **historial directo**, calculado con seis temporadas y `schedule`.
+
+Los calendarios se piden en paralelo y se guardan en la caché de memoria. Durante la
+misma sesión, volver a usar el mismo equipo como primer lado no repite esas peticiones.
 
 El gamelog trae por cada partido: `totalGoals, goalAssists, totalShots, shotsOnTarget,
 foulsCommitted, foulsSuffered, offsides, yellowCards, redCards`, más fecha, rival,
@@ -54,29 +99,146 @@ competiciones de selección (Mundial, amistosos, Eurocopa, Nations League, Copa 
 Copa Oro y eliminatorias), fusionan todo, quitan duplicados por id de partido y ordenan
 por fecha.
 
-## Versión web (index.html + styles.css + app.js)
+## Versión web
 
-La herramienta como página web, **sin servidor ni dependencias**: tres archivos
-estáticos — `index.html` (estructura), `styles.css` (diseño, con modo claro/oscuro
-automático) y `app.js` (lógica). Abre `index.html` con doble clic (o sube la carpeta
+La herramienta como página web, **sin servidor ni dependencias ni compilación**: HTML,
+CSS y JavaScript de toda la vida. Abre `index.html` con doble clic (o sube la carpeta
 gratis a GitHub Pages/Netlify). Funciona porque la API de ESPN envía
 `Access-Control-Allow-Origin: *`, así que el navegador puede llamarla directamente sin
 problema de CORS.
 
-La portada muestra **tres tarjetas de modo** (tiros por jugador / partidos de un equipo /
-córners por partido); al elegir una se convierten en pestañas y aparece el buscador.
+### Estructura
+
+```
+index.html          estructura de la página
+styles.css          diseño (tokens, modo claro/oscuro automático, móvil)
+js/config.js        URLs, competiciones, alias de países y ajustes de cada modo
+js/formato.js       fechas, números y etiquetas en es-ES
+js/logica.js        parseo, medias, comparación y lecturas — funciones puras, sin DOM ni red
+js/api.js           llamadas a ESPN + caché de sesión
+js/bd.js            base de datos local (IndexedDB): esquema, transacciones y consultas
+js/repositorio.js   guardar y consultar el modelo: partidos, equipos, jugadores, eventos
+js/datos.js         orquesta base + red: lee de local y pide a ESPN sólo lo que falta
+js/ui.js            piezas de interfaz reutilizables (tarjetas, tablas, gráfico, tooltip)
+js/vistas.js        arma cada una de las cuatro pantallas con esas piezas
+js/app.js           controlador: estado, flujo y render
+```
+
+Son **scripts clásicos cargados en orden con `defer`**, no módulos ES: los módulos
+(`import`/`export`) los bloquea el navegador al abrir un archivo con doble clic
+(`file://`), y esa forma de usarlo no debía romperse. Para añadir un módulo nuevo basta
+crear el archivo y añadir su `<script>` en `index.html` antes de `js/app.js`.
+
+### Interfaz
+
+La portada muestra **cuatro tarjetas de modo** (tiros por jugador / partidos de un equipo /
+córners por partido / comparar dos equipos); al elegir una se convierten en pestañas y
+aparece el buscador con ejemplos clicables. Cada modo tiene **su propio color** (azul,
+verde, naranja y violeta) que tiñe pestañas, botones e insignias — pero **nunca las
+barras de los gráficos**: las series de datos usan siempre la misma rampa azul, validada
+para daltonismo, para que un gráfico signifique lo mismo en todas las pantallas.
+
+Cada vista incluye una tarjeta **«Lo que dicen los datos»**: frases derivadas de los
+partidos descargados, siempre con el conteo a la vista para poder contrastarlas con la
+tabla («Más de 9,5 córners totales en 7 de 10 (70%)», «5 partidos seguidos sin perder»,
+«Tiró a puerta en 7 de 10 partidos»). Mientras cargan los datos se muestran bloques
+grises con la forma del contenido, para que la página no dé saltos.
 Cada vista incluye: cabecera con foto del jugador o escudo del equipo (con inicial de
 reserva si la imagen no carga), tiles de promedios con barras de proporción, gráfico de
 columnas apiladas con línea de media y tooltip, y tabla completa con chips de resultado
 V/E/D, sede (casa/fuera), ceros atenuados y mini-barras en la columna clave. En modo
 equipo la cabecera lleva además la **racha de forma** de los últimos 5 partidos.
 
-El código de `app.js` está separado en módulos para poder ampliarlo:
-`CONFIG` (competiciones y URLs), `Api` (llamadas a ESPN), `Logica` (parseo y
-combinación, funciones puras sin DOM), `Formato` (fechas/números/resultados es-ES),
-`UI` (render, con un constructor genérico de gráfico apilado que comparten las tres
-vistas) y `App` (controlador con caché: cambiar el número de partidos no refetchea, y
-los córners ya descargados no se vuelven a pedir).
+La comparación incorpora un resumen H2H con partidos, victorias, empates, derrotas y
+goles, seguido de los marcadores de las últimas seis temporadas. Si no existe ningún
+cruce en ese periodo, se muestra un estado vacío en lugar de ocultar la sección.
+
+Al buscar un equipo se **prioriza la coincidencia exacta** y se ocultan los equipos
+femeninos y juveniles salvo que se pidan, así que «américa vs chivas» resuelve solo
+(América y Guadalajara) sin listas intermedias.
+
+## Base de datos local (IndexedDB)
+
+La aplicación **descarga de ESPN una sola vez y luego consulta su propia base**, que
+vive en el navegador. Un partido ya jugado no cambia nunca, así que guardarlo es
+seguro y elimina casi todo el tráfico.
+
+### Esquema
+
+Modelo normalizado: **el partido se guarda una vez**, en forma neutral (local y
+visitante), y la vista de cada equipo se deriva al consultarlo.
+
+| Almacén | Clave | Índices | Contiene |
+|---|---|---|---|
+| `ligas` | `slug` | — | Competiciones vistas (`mex.1`, `esp.1`, `uefa.champions`…) |
+| `equipos` | `id` | `porLiga` | Nombre, abreviatura, escudo |
+| `participaciones` | `[idEquipo, ligaSlug]` | `porLiga`, `porEquipo` | Qué equipo juega qué competición |
+| `partidos` | `eventId` | `porFecha`, `porLigaFecha`, `porEquipo` | Fecha, liga, local/visitante y marcador |
+| `estadisticas` | `[eventId, idEquipo]` | `porPartido`, `porEquipoFecha`, `porLigaFecha` | Córners, tiros, tiros a puerta, posesión, faltas, tarjetas |
+| `eventos` | `id` | `porPartido`, `porJugador`, `porTipo` | Goles, penaltis, tarjetas y cambios, con minuto |
+| `jugadores` | `id` | `porEquipo` | Nombre y posición |
+| `actuaciones` | `[eventId, idJugador]` | `porPartido`, `porJugadorFecha`, `porEquipo` | Lo que hizo cada jugador en cada partido: tiros, goles, tarjetas |
+| `cobertura` | `[ligaSlug, rango]` | `porLiga` | Qué rangos de fechas ya se han descargado |
+
+Tres decisiones que hacen que esto funcione:
+
+- **Índice `[idEquipo, fecha]` en `estadisticas`.** Los últimos N partidos de un equipo
+  salen en **una sola consulta y ya ordenados**, sin recorrer nada ni ordenar en memoria.
+  Medido: 5 partidos en **2,1 ms**.
+- **`participaciones` como tabla de unión.** Un equipo juega liga, copa y continental;
+  con esta tabla se puede preguntar «qué equipos tengo de la Liga MX» sin duplicar equipos.
+- **`cobertura`.** Sin ella no se puede distinguir *«no hay partidos»* de *«no lo he
+  descargado»*, y se acabaría pidiendo a ESPN igual que antes.
+
+### Sobre los remates
+
+**ESPN no publica remates individuales**: se comprobó que en el resumen de partido no
+existen `shotData`, coordenadas, tipo de remate ni xG. Por eso **no hay una tabla
+`remates`** que nunca podría llenarse. Los remates se guardan donde sí hay datos reales:
+
+- **por equipo y partido** en `estadisticas` (`tiros`, `tirosPuerta`);
+- **por jugador y partido** en `actuaciones` (los tiros de cada futbolista);
+- y los que acabaron en gol, en `eventos`, con minuto y autor.
+
+### Qué permite
+
+Consultas que antes eran imposibles y ahora salen de local, sin red: ranking de córners
+de una competición, porcentaje de partidos que superan una línea, histórico largo de un
+equipo, o los remates de cada jugador en un partido concreto. En la prueba con datos
+reales: 164 partidos de dos ligas guardados en **118 ms**, ocupando **448 KB**.
+
+Si el navegador bloquea IndexedDB (modo privado, alguna configuración de Safari), la
+aplicación lo detecta, lo dice en el pie y sigue funcionando contra la red como antes.
+
+### Cómo se ahorran peticiones
+
+Seis mecanismos, medidos con datos reales:
+
+1. **La base local.** Lo ya descargado no se vuelve a pedir, ni siquiera tras cerrar el
+   navegador. Sólo se refresca el tramo que llega hasta hoy, porque los partidos
+   antiguos no cambian.
+2. **Un marcador sirve para toda la liga.** Comparar dos rivales de la misma liga cuesta
+   lo mismo que consultar uno solo.
+3. **Ventanas progresivas.** Se pide un tramo de 4 meses y se para en cuanto hay
+   partidos suficientes para lo que se va a mostrar; solo se amplía a 8 o 12 meses si
+   hacen falta más. Pedir «últimos 5» ya no descarga un año entero.
+4. **Caché de sesión.** Respuestas en memoria y búsquedas en `sessionStorage`.
+5. **Lista de ligas muertas.** Si una liga responde 404 (no existe para ese país), se
+   apunta y no se vuelve a pedir en toda la sesión.
+6. **Calendario H2H anual.** Seis años de enfrentamientos cuestan seis peticiones fijas,
+   no una descarga por cada competición y ventana de fechas.
+
+La parte de estadísticas recientes mantiene la medición: **América vs Chivas con
+«últimos 5» = 5 peticiones** (antes 10). La primera comparación añade las **6 peticiones
+fijas** del historial; repetirla durante la sesión usa la caché. Bajo el buscador se
+muestra siempre el coste total de la consulta.
+
+> **Si ESPN te limita:** haciendo muchas consultas seguidas, ESPN/Akamai puede empezar a
+> responder «Access Denied» (403). Se ha comprobado que el filtro mira el *User-Agent*:
+> con muchas peticiones desde una misma IP puede rechazar las que parecen de navegador
+> aunque `curl` siga recibiendo 200. La app lo detecta y lo dice explícitamente
+> («No se pudo conectar con ESPN…»), en lugar de confundirlo con que no haya datos.
+> Se pasa solo esperando un rato, y la base local es justo lo que evita provocarlo.
 
 **Sobre la columna TA (tarjetas amarillas):** no está rota — simplemente los
 delanteros ven pocas tarjetas, así que en los últimos 5 partidos suele ser 0 real.

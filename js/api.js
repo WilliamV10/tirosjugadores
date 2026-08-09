@@ -93,6 +93,13 @@ const Api = {
     return this._jsonOpcional(url, liga);
   },
 
+  /** Calendario completo de un equipo en una temporada. El slug especial
+      "all" incluye liga, copas, torneos continentales y amistosos. */
+  calendarioEquipo(idEquipo, temporada) {
+    const url = `${CONFIG.sitioBase}/apis/site/v2/sports/soccer/all/teams/${encodeURIComponent(idEquipo)}/schedule?season=${temporada}`;
+    return this._jsonOpcional(url);
+  },
+
   /** GET que devuelve null en vez de lanzar: sirve para sondear ligas que
       quiza no existan. Distingue dos cosas que parecen iguales pero no lo son:
       - 404: esa liga no existe -> se apunta para no volver a pedirla.

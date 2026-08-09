@@ -20,10 +20,36 @@
 </head>
 <body>
 <main>
+  <div class="barra-superior">
+    <a class="marca" href="#hero" aria-label="Ir al inicio">
+      <span class="marca-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path>
+        </svg>
+      </span>
+      <span>Match<span class="marca-acento">Data</span></span>
+    </a>
+    <span class="fuente-en-vivo"><span class="punto-vivo"></span>ESPN · datos en vivo</span>
+  </div>
+
   <header class="hero" id="hero">
-    <p class="lema"><span class="punto-vivo"></span>Datos reales de ESPN</p>
-    <h1 class="hero-titulo">Analiza antes de apostar</h1>
-    <p class="subtitulo">Tiros, goles y córners de los últimos partidos — de cualquier jugador, club o selección.</p>
+    <div class="hero-contenido">
+      <p class="lema">Análisis deportivo, sin intuiciones</p>
+      <h1 class="hero-titulo">Decide con datos.<br><span>Apuesta con criterio.</span></h1>
+      <p class="subtitulo">Explora tiros, goles, forma y córners de los últimos partidos de cualquier jugador, club o selección.</p>
+      <div class="hero-beneficios" aria-label="Características">
+        <span>Sin registro</span><span>Datos reales</span><span>Actualización automática</span>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <div class="visual-cabecera"><span>Rendimiento reciente</span><span class="visual-chip">Últimos 6</span></div>
+      <div class="visual-valor">8.7 <small>promedio</small></div>
+      <div class="visual-grafico">
+        <i style="--h:42%"></i><i style="--h:68%"></i><i style="--h:54%"></i>
+        <i style="--h:84%"></i><i style="--h:63%"></i><i style="--h:91%"></i>
+      </div>
+      <div class="visual-pie"><span>Forma sólida</span><b>+18%</b></div>
+    </div>
   </header>
 
   <nav class="modos" id="modos" aria-label="Tipo de consulta">

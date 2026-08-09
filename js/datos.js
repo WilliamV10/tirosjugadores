@@ -59,6 +59,20 @@ const Datos = {
     return { listas, tramosUsados };
   },
 
+  /** Historial directo eficiente: una peticion por temporada al calendario
+      global de A, en lugar de descargar cada liga por ventanas de fechas. */
+  async enfrentamientosHistoricos(equipoA, equipoB, { temporadas = 6 } = {}) {
+    const actual = new Date().getFullYear();
+    const anios = Array.from({ length: temporadas }, (_, i) => actual - i);
+    const calendarios = await Promise.all(
+      anios.map((anio) => Api.calendarioEquipo(equipoA.id, anio))
+    );
+    const filas = calendarios
+      .filter(Boolean)
+      .flatMap((datos) => Logica.parsearCalendario(datos, equipoA.id));
+    return Logica.combinar([filas]).filter((fila) => fila.idRival === String(equipoB.id));
+  },
+
   /** Camino sin base: se descarga y se usa en memoria, como antes. */
   async _sinBase(equipos, { minimo, alAvanzar }) {
     const ligas = [...new Set(equipos.flatMap((equipo) => equipo.ligas))];
