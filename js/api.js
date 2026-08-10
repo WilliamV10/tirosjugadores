@@ -93,6 +93,13 @@ const Api = {
     return this._jsonOpcional(url, liga);
   },
 
+  /** Agenda diaria agrupada por competición. Una sola petición devuelve
+      las ligas destacadas por ESPN y sus partidos para la fecha indicada. */
+  marcadorDelDia(fecha) {
+    const url = `${CONFIG.sitioBase}/apis/v2/scoreboard/header?sport=soccer&region=us&lang=es&contentorigin=espn&dates=${fecha}`;
+    return this._jsonOpcional(url);
+  },
+
   /** Calendario completo de un equipo en una temporada. El slug especial
       "all" incluye liga, copas, torneos continentales y amistosos. */
   calendarioEquipo(idEquipo, temporada) {

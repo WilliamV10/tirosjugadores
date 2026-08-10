@@ -11,6 +11,7 @@ const Formato = {
 
   fechaCorta: (fecha) => fecha.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }),
   fechaLarga: (fecha) => fecha.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }),
+  hora: (fecha) => fecha.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
 
   /** ESPN devuelve W/D/L; en español V (victoria) / E (empate) / D (derrota). */
   resultado(codigo) {

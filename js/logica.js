@@ -146,6 +146,42 @@ const Logica = {
     return filas;
   },
 
+  /** Normaliza el marcador diario agrupado. Conserva la liga de cada bloque
+      para que el usuario pueda elegir un partido y reutilizar el comparador. */
+  parsearAgendaDiaria(datos) {
+    const ligas = datos?.sports?.[0]?.leagues || [];
+    return ligas.map((liga) => {
+      const partidos = (liga.events || []).map((evento) => {
+        const local = (evento.competitors || []).find((c) => c.homeAway === "home");
+        const visitante = (evento.competitors || []).find((c) => c.homeAway === "away");
+        if (!local?.id || !visitante?.id) return null;
+        const equipo = (dato) => ({
+          id: String(dato.id),
+          uid: dato.uid || `s:600~t:${dato.id}`,
+          displayName: dato.displayName,
+          abbreviation: dato.abbreviation || "",
+          logo: dato.logo || "",
+        });
+        return {
+          eventId: String(evento.id),
+          fecha: new Date(evento.date),
+          estado: evento.status || "pre",
+          detalleEstado: evento.fullStatus?.type?.shortDetail || evento.fullStatus?.type?.detail || "",
+          local: equipo(local),
+          visitante: equipo(visitante),
+          marcador: local.score !== undefined && visitante.score !== undefined ? `${local.score}-${visitante.score}` : null,
+        };
+      }).filter(Boolean).sort((a, b) => a.fecha - b.fecha);
+      return {
+        id: String(liga.id || liga.slug),
+        slug: liga.slug || "",
+        nombre: liga.name || liga.abbreviation || liga.slug,
+        abreviatura: liga.abbreviation || "",
+        partidos,
+      };
+    }).filter((liga) => liga.partidos.length);
+  },
+
   /** Lee una estadistica de un competidor del marcador. Null si no viene. */
   estadistica(competidor, nombre) {
     const encontrada = (competidor?.statistics || []).find((s) => s.name === nombre);
@@ -254,6 +290,7 @@ const Logica = {
       cornersContra: estadistica.cornersContra,
       tiros: estadistica.tiros,
       tirosPuerta: estadistica.tirosPuerta,
+      tirosContra: estadistica.tirosContra,
       posesion: estadistica.posesion,
     };
   },
@@ -392,6 +429,74 @@ const Logica = {
     return { veces, n, porcentaje: n ? (veces / n) * 100 : 0 };
   },
 
+  /** Distribucion, recencia, tendencia y cumplimiento de una linea. */
+  analizarSerie(filas, selector, linea = null) {
+    const valores = filas.map(selector).filter(Number.isFinite);
+    const n = valores.length;
+    if (!n) return null;
+    const ordenar = [...valores].sort((a, b) => a - b);
+    const media = valores.reduce((suma, valor) => suma + valor, 0) / n;
+    const mitad = Math.floor(n / 2);
+    const mediana = n % 2 ? ordenar[mitad] : (ordenar[mitad - 1] + ordenar[mitad]) / 2;
+    const desviacion = Math.sqrt(valores.reduce((suma, valor) => suma + (valor - media) ** 2, 0) / n);
+    const pesos = valores.map((_, indice) => n - indice);
+    const mediaPonderada = valores.reduce((suma, valor, indice) => suma + valor * pesos[indice], 0)
+      / pesos.reduce((suma, peso) => suma + peso, 0);
+    const corte = Math.max(1, Math.floor(n / 2));
+    const recientes = valores.slice(0, corte);
+    const anteriores = valores.slice(corte);
+    const promedio = (lista) => lista.reduce((suma, valor) => suma + valor, 0) / lista.length;
+    const delta = anteriores.length ? promedio(recientes) - promedio(anteriores) : 0;
+    const umbral = Math.max(0.15, media * 0.08);
+    const tendencia = delta > umbral ? "sube" : delta < -umbral ? "baja" : "estable";
+    const cv = media ? desviacion / media : 0;
+    const volatilidad = cv < 0.3 ? "baja" : cv < 0.6 ? "media" : "alta";
+    let cumplimiento = null;
+    if (linea !== null) {
+      const veces = valores.filter((valor) => valor > linea).length;
+      const porcentaje = (veces / n) * 100;
+      cumplimiento = { linea, veces, n, porcentaje, cuotaJusta: porcentaje ? 100 / porcentaje : null };
+    }
+    return {
+      n, media, mediaPonderada, mediana, minimo: ordenar[0], maximo: ordenar[n - 1],
+      desviacion, volatilidad, tendencia, delta, cumplimiento,
+    };
+  },
+
+  /** Cruza ataque propio con defensa rival; es una estimacion basada en
+      medias ponderadas, no xG ni una garantia de resultado. */
+  proyectarPartido(filasA, filasB, { lineaGoles = 2.5, lineaCorners = 9.5 } = {}) {
+    const ponderada = (filas, selector) => this.analizarSerie(filas, selector)?.mediaPonderada ?? null;
+    const combinar = (ataque, defensa) => ataque === null || defensa === null ? null : (ataque + defensa) / 2;
+    const golesA = combinar(ponderada(filasA, (p) => p.golesFavor), ponderada(filasB, (p) => p.golesContra));
+    const golesB = combinar(ponderada(filasB, (p) => p.golesFavor), ponderada(filasA, (p) => p.golesContra));
+    const cornersA = combinar(ponderada(filasA, (p) => p.cornersFavor), ponderada(filasB, (p) => p.cornersContra));
+    const cornersB = combinar(ponderada(filasB, (p) => p.cornersFavor), ponderada(filasA, (p) => p.cornersContra));
+    const tirosA = combinar(ponderada(filasA, (p) => p.tiros), ponderada(filasB, (p) => p.tirosContra));
+    const tirosB = combinar(ponderada(filasB, (p) => p.tiros), ponderada(filasA, (p) => p.tirosContra));
+    // ESPN no conserva de forma fiable los tiros a puerta concedidos en todo
+    // el historial local; se muestra la media ponderada propia, sin inventar
+    // un ajuste defensivo.
+    const tirosPuertaA = ponderada(filasA, (p) => p.tirosPuerta);
+    const tirosPuertaB = ponderada(filasB, (p) => p.tirosPuerta);
+    const tasaCombinada = (selector, linea) => {
+      const a = this.analizarSerie(filasA, selector, linea)?.cumplimiento;
+      const b = this.analizarSerie(filasB, selector, linea)?.cumplimiento;
+      return a && b ? (a.porcentaje + b.porcentaje) / 2 : a?.porcentaje ?? b?.porcentaje ?? null;
+    };
+    return {
+      golesA, golesB, totalGoles: golesA === null || golesB === null ? null : golesA + golesB,
+      cornersA, cornersB, totalCorners: cornersA === null || cornersB === null ? null : cornersA + cornersB,
+      tirosA, tirosB, totalTiros: tirosA === null || tirosB === null ? null : tirosA + tirosB,
+      tirosPuertaA, tirosPuertaB,
+      totalTirosPuerta: tirosPuertaA === null || tirosPuertaB === null ? null : tirosPuertaA + tirosPuertaB,
+      probGoles: tasaCombinada((p) => p.golesFavor + p.golesContra, lineaGoles),
+      probCorners: tasaCombinada((p) => p.cornersFavor === null ? NaN : p.cornersFavor + p.cornersContra, lineaCorners),
+      probAmbos: tasaCombinada((p) => p.golesFavor > 0 && p.golesContra > 0 ? 1 : 0, 0.5),
+      lineaGoles, lineaCorners,
+    };
+  },
+
   /** Perfil completo de un equipo sobre los partidos dados. */
   perfil(filas) {
     const n = filas.length;
@@ -431,6 +536,33 @@ const Logica = {
       conUnTiroPuerta: conteo((p) => p.tirosPuerta >= 1),
       conDosPuerta: conteo((p) => p.tirosPuerta >= 2),
       conGol: conteo((p) => p.goles >= 1),
+    };
+  },
+
+  /** Calidad del remate y comportamiento reciente frente a una línea.
+      Usa únicamente totales publicados por ESPN; no intenta inferir xG. */
+  perfilTirosJugador(partidos, clave = "tiros", linea = 1.5) {
+    const totalTiros = partidos.reduce((suma, p) => suma + p.tiros, 0);
+    const totalPuerta = partidos.reduce((suma, p) => suma + p.tirosPuerta, 0);
+    const goles = partidos.reduce((suma, p) => suma + p.goles, 0);
+    let rachaLinea = 0;
+    for (const partido of partidos) {
+      if (partido[clave] <= linea) break;
+      rachaLinea++;
+    }
+    const valores = partidos.map((p) => p[clave]);
+    return {
+      precision: totalTiros ? (totalPuerta / totalTiros) * 100 : 0,
+      conversion: totalTiros ? (goles / totalTiros) * 100 : 0,
+      golesPorTiroPuerta: totalPuerta ? (goles / totalPuerta) * 100 : 0,
+      rachaLinea,
+      sinRematar: partidos.filter((p) => p.tiros === 0).length,
+      distribucion: {
+        cero: valores.filter((v) => v === 0).length,
+        uno: valores.filter((v) => v === 1).length,
+        dos: valores.filter((v) => v === 2).length,
+        tresMas: valores.filter((v) => v >= 3).length,
+      },
     };
   },
 

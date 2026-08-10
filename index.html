@@ -108,6 +108,20 @@
         <span class="modo-desc">«América vs Tigres», cara a cara en 8 métricas.</span>
       </span>
     </button>
+
+    <button type="button" class="modo" data-modo="hoy">
+      <span class="modo-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="16" rx="2.5"></rect>
+          <path d="M3 10h18M8 3v4M16 3v4"></path>
+          <circle cx="12" cy="15.5" r="2.3"></circle>
+        </svg>
+      </span>
+      <span class="modo-texto">
+        <span class="modo-titulo">Partidos de hoy</span>
+        <span class="modo-desc">Agenda por competición lista para analizar.</span>
+      </span>
+    </button>
   </nav>
 
   <form class="controles" id="formulario" hidden>
@@ -123,6 +137,21 @@
       <option value="15">Últimos 15</option>
       <option value="20">Últimos 20</option>
     </select>
+    <select id="selector-sede" aria-label="Filtrar por sede" hidden>
+      <option value="todos" selected>Local y visita</option>
+      <option value="local">Solo local</option>
+      <option value="visita">Solo visita</option>
+      <option value="partido" hidden>Local A / visita B</option>
+    </select>
+    <select id="selector-competicion" aria-label="Filtrar por competición">
+      <option value="todos" selected>Todas las competiciones</option>
+    </select>
+    <select id="selector-metrica-tiros" aria-label="Tipo de tiros" hidden>
+      <option value="tiros" selected>Tiros totales</option>
+      <option value="tirosPuerta">Tiros a puerta</option>
+    </select>
+    <select id="selector-linea" aria-label="Línea de análisis"></select>
+    <button type="button" class="secundario boton-proyeccion" id="boton-proyeccion" hidden disabled>Ver proyección</button>
     <button type="submit" class="primario" id="boton-buscar">Analizar</button>
   </form>
 
@@ -131,6 +160,39 @@
   <div id="candidatos" class="candidatos"></div>
   <div id="resultados"></div>
   <div id="tooltip" class="tooltip" role="tooltip"></div>
+
+  <dialog id="modal-proyeccion" class="modal-proyeccion" aria-labelledby="titulo-proyeccion">
+    <div class="modal-cabecera">
+      <div>
+        <span class="modal-kicker">Análisis avanzado</span>
+        <h2 id="titulo-proyeccion">Proyección del partido</h2>
+      </div>
+      <button type="button" class="modal-cerrar" id="cerrar-proyeccion" aria-label="Cerrar proyección">×</button>
+    </div>
+    <div class="modal-tabs" role="tablist" aria-label="Apartado de proyección">
+      <button type="button" role="tab" class="modal-tab activo" data-vista="goles" aria-selected="true">Goles</button>
+      <button type="button" role="tab" class="modal-tab" data-vista="corners" aria-selected="false">Córners</button>
+      <button type="button" role="tab" class="modal-tab" data-vista="tiros" aria-selected="false">Tiros</button>
+    </div>
+    <div class="modal-controles">
+      <label id="control-linea-goles">Línea de goles
+        <select id="selector-proyeccion-goles">
+          <option value="1.5">Más de 1,5</option>
+          <option value="2.5" selected>Más de 2,5</option>
+          <option value="3.5">Más de 3,5</option>
+        </select>
+      </label>
+      <label id="control-linea-corners" hidden>Línea de córners
+        <select id="selector-proyeccion-corners">
+          <option value="8.5">Más de 8,5</option>
+          <option value="9.5" selected>Más de 9,5</option>
+          <option value="10.5">Más de 10,5</option>
+          <option value="11.5">Más de 11,5</option>
+        </select>
+      </label>
+    </div>
+    <div id="contenido-proyeccion"></div>
+  </dialog>
 
   <footer class="pie">
     <span id="estado-base" class="estado-base"></span>

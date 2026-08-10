@@ -12,7 +12,13 @@ const CONFIG = {
   cacheMinutos: 30,
 
   // Ventanas de fecha del marcador: 4 meses cada tramo, hasta 3 tramos
-  ventana: { meses: 4, tramosMaximos: 3 },
+  ventana: {
+    meses: 4,
+    tramosMaximos: 3,
+    // Reserva amplia para filtrar hasta 20 partidos de local o visitante
+    // sin volver a consultar ESPN al cambiar los controles.
+    precargaEquipos: 60,
+  },
 
   // Competiciones de seleccion: ESPN no las lista en los filtros del club
   ligasSeleccion: [
@@ -95,6 +101,11 @@ const CONFIG = {
       tipo: "duelo",
       placeholder: "Dos equipos separados por «vs», ej: América vs Tigres",
       ejemplos: ["América vs Tigres", "Real Madrid vs Barcelona", "Chivas vs Cruz Azul"],
+    },
+    hoy: {
+      tipo: "agenda",
+      placeholder: "",
+      ejemplos: [],
     },
   },
 };

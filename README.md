@@ -1,6 +1,6 @@
 # Apuestas — estadísticas de jugadores y equipos
 
-Herramienta con **cuatro modos de consulta** pensados para mercados de apuestas:
+Herramienta con **cinco modos de consulta** pensados para mercados de apuestas:
 
 1. **Tiros por jugador** — tiros y tiros a puerta de un futbolista, partido a partido.
 2. **Partidos de un equipo** — resultados recientes, forma, goles a favor/en contra y porterías a cero.
@@ -8,6 +8,8 @@ Herramienta con **cuatro modos de consulta** pensados para mercados de apuestas:
 4. **Comparar dos equipos** — se escribe «América vs Tigres» y se enfrentan sus promedios
    (puntos, goles, córners, tiros, tiros a puerta y posesión) en barras cara a cara, más el
    historial de enfrentamientos directos.
+5. **Partidos de hoy** — agenda agrupada por competición, con acceso directo al análisis
+   y la proyección de cada encuentro.
 
 > **Sobre los goles esperados (xG):** la API pública de ESPN **no los publica** — se
 > comprobó buscando `expectedGoals`/`xG` en el resumen de partido, en el boxscore, en las
@@ -41,6 +43,7 @@ Endpoints usados:
 |---|---|
 | Buscar jugador o equipo | `https://site.web.api.espn.com/apis/search/v2?query=NOMBRE&limit=10` (grupos `player` y `team`) |
 | Partidos + estadísticas de un jugador | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/ID/gamelog` |
+| **Agenda diaria agrupada** | `https://site.api.espn.com/apis/v2/scoreboard/header?sport=soccer&dates=YYYYMMDD` |
 | **Partidos de equipo con estadísticas** | `https://site.api.espn.com/apis/site/v2/sports/soccer/LIGA/scoreboard?dates=YYYYMMDD-YYYYMMDD&limit=300` |
 | **Historial anual de un equipo** | `https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/ID/schedule?season=YYYY` |
 
@@ -131,8 +134,8 @@ crear el archivo y añadir su `<script>` en `index.html` antes de `js/app.js`.
 
 ### Interfaz
 
-La portada muestra **cuatro tarjetas de modo** (tiros por jugador / partidos de un equipo /
-córners por partido / comparar dos equipos); al elegir una se convierten en pestañas y
+La portada muestra **cinco tarjetas de modo** (tiros por jugador / partidos de un equipo /
+córners por partido / comparar dos equipos / partidos de hoy); al elegir una se convierten en pestañas y
 aparece el buscador con ejemplos clicables. Cada modo tiene **su propio color** (azul,
 verde, naranja y violeta) que tiñe pestañas, botones e insignias — pero **nunca las
 barras de los gráficos**: las series de datos usan siempre la misma rampa azul, validada
@@ -151,7 +154,64 @@ equipo la cabecera lleva además la **racha de forma** de los últimos 5 partido
 
 La comparación incorpora un resumen H2H con partidos, victorias, empates, derrotas y
 goles, seguido de los marcadores de las últimas seis temporadas. Si no existe ningún
-cruce en ese periodo, se muestra un estado vacío en lugar de ocultar la sección.
+cruce en ese periodo, se muestra un estado vacío en lugar de ocultar la sección. Las
+tablas recientes de ambos equipos incluyen sede (C/F) y competición en cada partido.
+
+Los modos de equipo incluyen un filtro **Local y visita / Solo local / Solo visita**.
+Se aplica antes de seleccionar los últimos N partidos, por lo que vuelve a calcular
+promedios, porcentajes, lecturas automáticas, forma, gráficas y tablas. Al buscar se
+precargan hasta 60 partidos por equipo; después cambiar la cantidad o la sede **no hace
+ninguna petición**: todo se filtra y recalcula en memoria. En la comparación, cada
+perfil usa su propia condición de localía y el H2H se interpreta desde el primer equipo
+escrito.
+
+También existe un filtro local de **competición**. Sus opciones se construyen con los
+partidos ya precargados y se aplican antes del filtro de sede y del recorte a los
+últimos N; cambiarlo no genera llamadas a ESPN.
+
+La vista **Partidos de hoy** utiliza una sola respuesta agrupada de ESPN para construir
+la agenda por competición, con hora, estado en vivo/final, marcador y escudos. Su filtro
+de competición funciona en memoria. Al elegir un encuentro, la aplicación identifica la
+liga habitual de ambos clubes y reutiliza el comparador y el modal de proyección; esto
+evita tratar una copa ocasional como si fuera toda la historia reciente del equipo. La
+muestra se configura automáticamente con el equipo A como local y el B como visitante.
+
+### Probabilidades, tendencia y distribución
+
+Las vistas de tiros, goles y córners incorporan un panel analítico con línea
+configurable. Para la serie filtrada muestra:
+
+- frecuencia de cumplimiento y conteo visible (`7 de 10`, `70 %`);
+- **cuota justa empírica** (`1 / frecuencia`), sin margen de casa;
+- media simple y media ponderada, dando más peso a los partidos recientes;
+- tendencia frente a la mitad anterior de la muestra;
+- mediana, mínimo, máximo, desviación y volatilidad baja/media/alta.
+
+En **Tiros por jugador** se puede cambiar el mercado entre tiros totales y tiros a
+puerta. Cada mercado tiene sus propias líneas (1+, 2+, 3+ y 4+) y recalcula todo sin
+volver a consultar ESPN. Un segundo panel muestra precisión de remate, conversión a
+gol, goles por tiro a puerta, racha actual sobre la línea, partidos sin rematar y la
+distribución de 0, 1, 2 o 3+ remates en la muestra seleccionada.
+
+En el comparador, el botón **Ver proyección** abre un modal separado para no recargar la
+pantalla principal. Dentro hay tres apartados —Goles, Córners y Tiros— que se muestran
+uno a la vez, además de sus líneas configurables. La proyección cruza el ataque ponderado de un equipo con
+la defensa ponderada del rival:
+
+```text
+goles de A = (goles marcados por A + goles recibidos por B) / 2
+córners de A = (córners sacados por A + córners concedidos por B) / 2
+tiros de A = (tiros realizados por A + tiros concedidos por B) / 2
+```
+
+Se calcula lo mismo para B y se muestran tiros totales y tiros a puerta por separado,
+sus totales combinados, la frecuencia histórica de las líneas
+configuradas de goles y córners y **ambos equipos marcan**, con su cuota justa empírica.
+Todo responde a los filtros actuales de competición, sede y número de partidos.
+
+> Estas cifras son resúmenes y estimaciones transparentes de la muestra, no xG ni
+> probabilidades calibradas. La cuota justa sirve para comparar una frecuencia con una
+> cuota ofrecida, pero todavía no sustituye un backtesting del modelo.
 
 Al buscar un equipo se **prioriza la coincidencia exacta** y se ocultan los equipos
 femeninos y juveniles salvo que se pidan, así que «américa vs chivas» resuelve solo
@@ -219,9 +279,9 @@ Seis mecanismos, medidos con datos reales:
    antiguos no cambian.
 2. **Un marcador sirve para toda la liga.** Comparar dos rivales de la misma liga cuesta
    lo mismo que consultar uno solo.
-3. **Ventanas progresivas.** Se pide un tramo de 4 meses y se para en cuanto hay
-   partidos suficientes para lo que se va a mostrar; solo se amplía a 8 o 12 meses si
-   hacen falta más. Pedir «últimos 5» ya no descarga un año entero.
+3. **Precarga por ventanas.** Se piden tramos de 4 meses hasta reunir una reserva de
+   hasta 60 partidos por equipo o alcanzar 12 meses. Esa carga ocurre una sola vez;
+   cambiar entre 5/10/15/20 o todos/local/visita no vuelve a consultar ESPN.
 4. **Caché de sesión.** Respuestas en memoria y búsquedas en `sessionStorage`.
 5. **Lista de ligas muertas.** Si una liga responde 404 (no existe para ese país), se
    apunta y no se vuelve a pedir en toda la sesión.

@@ -40,6 +40,19 @@ const UI = {
     formulario: () => document.getElementById("formulario"),
     entrada: () => document.getElementById("entrada-nombre"),
     selector: () => document.getElementById("selector-partidos"),
+    selectorSede: () => document.getElementById("selector-sede"),
+    selectorCompeticion: () => document.getElementById("selector-competicion"),
+    selectorMetricaTiros: () => document.getElementById("selector-metrica-tiros"),
+    selectorLinea: () => document.getElementById("selector-linea"),
+    botonProyeccion: () => document.getElementById("boton-proyeccion"),
+    modalProyeccion: () => document.getElementById("modal-proyeccion"),
+    cerrarProyeccion: () => document.getElementById("cerrar-proyeccion"),
+    tabsProyeccion: () => document.querySelectorAll(".modal-tab"),
+    controlLineaGoles: () => document.getElementById("control-linea-goles"),
+    controlLineaCorners: () => document.getElementById("control-linea-corners"),
+    selectorProyeccionGoles: () => document.getElementById("selector-proyeccion-goles"),
+    selectorProyeccionCorners: () => document.getElementById("selector-proyeccion-corners"),
+    contenidoProyeccion: () => document.getElementById("contenido-proyeccion"),
     boton: () => document.getElementById("boton-buscar"),
     ejemplos: () => document.getElementById("ejemplos"),
     estado: () => document.getElementById("estado"),
@@ -102,9 +115,47 @@ const UI = {
       boton.classList.toggle("activo", activo);
       boton.setAttribute("aria-pressed", String(activo));
     }
-    this.refs.formulario().hidden = false;
+    this.refs.formulario().hidden = modo === "hoy";
+    this.refs.selectorSede().hidden = ajustes.tipo === "player";
+    const opcionPartido = this.refs.selectorSede().querySelector('option[value="partido"]');
+    opcionPartido.hidden = modo !== "comparar";
+    if (modo !== "comparar" && this.refs.selectorSede().value === "partido") this.refs.selectorSede().value = "todos";
+    this.refs.selectorMetricaTiros().hidden = modo !== "tiros";
+    this.configurarLineas(modo);
+    this.refs.botonProyeccion().hidden = modo !== "comparar";
+    if (modo !== "comparar" && this.refs.modalProyeccion().open) this.refs.modalProyeccion().close();
     this.refs.entrada().placeholder = ajustes.placeholder;
-    this.refs.entrada().focus();
+    if (modo !== "hoy") this.refs.entrada().focus();
+  },
+
+  configurarLineas(modo) {
+    const principal = this.refs.selectorLinea();
+    const aPuerta = modo === "tiros" && this.refs.selectorMetricaTiros().value === "tirosPuerta";
+    const opciones = modo === "tiros"
+      ? aPuerta
+        ? [[0.5, "1+ a puerta"], [1.5, "2+ a puerta"], [2.5, "3+ a puerta"], [3.5, "4+ a puerta"]]
+        : [[0.5, "1+ tiros"], [1.5, "2+ tiros"], [2.5, "3+ tiros"], [3.5, "4+ tiros"]]
+      : modo === "corners"
+        ? [[8.5, "Más de 8,5 córners"], [9.5, "Más de 9,5 córners"], [10.5, "Más de 10,5 córners"], [11.5, "Más de 11,5 córners"]]
+        : [[1.5, "Más de 1,5 goles"], [2.5, "Más de 2,5 goles"], [3.5, "Más de 3,5 goles"]];
+    const llenar = (select, items, elegido) => {
+      select.replaceChildren(...items.map(([valor, texto]) => this.el("option", { value: valor }, [texto])));
+      select.value = String(elegido);
+    };
+    principal.hidden = modo === "comparar";
+    llenar(principal, opciones, modo === "tiros" ? (aPuerta ? 0.5 : 1.5) : modo === "corners" ? 9.5 : 2.5);
+  },
+
+  actualizarCompeticiones(filas) {
+    const select = this.refs.selectorCompeticion();
+    const anterior = select.value;
+    const nombres = [...new Set(filas.map((fila) => fila.competicion).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "es"));
+    select.replaceChildren(
+      this.el("option", { value: "todos" }, ["Todas las competiciones"]),
+      ...nombres.map((nombre) => this.el("option", { value: nombre }, [nombre])),
+    );
+    select.value = nombres.includes(anterior) ? anterior : "todos";
   },
 
   /** Atajos de ejemplo bajo el buscador, para no empezar con la página vacía. */

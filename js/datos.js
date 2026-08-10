@@ -9,6 +9,11 @@
    lo demás sigue funcionando igual.
    ============================================================ */
 const Datos = {
+  async partidosDelDia(fecha) {
+    const datos = await Api.marcadorDelDia(fecha);
+    return datos ? Logica.parsearAgendaDiaria(datos) : null;
+  },
+
   /** Descarga los tramos de liga que aún no estén en la base. Devuelve
       cuántos partidos nuevos se guardaron. */
   async sincronizar(ligas, rango) {
