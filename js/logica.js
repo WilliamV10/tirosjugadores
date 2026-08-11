@@ -280,6 +280,7 @@ const Logica = {
     return {
       eventId: estadistica.eventId,
       fecha: estadistica.fecha instanceof Date ? estadistica.fecha : new Date(estadistica.fecha),
+      ligaSlug: estadistica.ligaSlug || null,
       competicion: estadistica.competicion,
       rival: estadistica.nombreRival,
       idRival: estadistica.idRival,
@@ -321,6 +322,7 @@ const Logica = {
       filas.push({
         eventId: String(evento.id),
         fecha: new Date(evento.date),
+        ligaSlug: evento.league?.slug || null,
         competicion: evento.league?.abbreviation || evento.league?.name || "",
         rival: rival.team.displayName || rival.team.name || "?",
         idRival: String(rival.team.id),
@@ -464,18 +466,50 @@ const Logica = {
     };
   },
 
+  /** Determina si dos rachas viven en un contexto comparable. Una competición
+      compartida es el puente más fuerte; rivales comunes y H2H conectan
+      muestras de ligas distintas sin asignar ratings inventados a cada liga. */
+  comparabilidadMuestras(filasA, filasB, cruces = []) {
+    const claveCompeticion = (fila) => String(fila.ligaSlug || fila.competicion || "").trim().toLowerCase();
+    const competicionesA = new Set(filasA.map(claveCompeticion).filter(Boolean));
+    const competicionesB = new Set(filasB.map(claveCompeticion).filter(Boolean));
+    const compartidas = [...competicionesA].filter((clave) => competicionesB.has(clave));
+    const claveRival = (fila) => String(fila.idRival || fila.rival || "").trim().toLowerCase();
+    const rivalesA = new Set(filasA.map(claveRival).filter(Boolean));
+    const rivalesB = new Set(filasB.map(claveRival).filter(Boolean));
+    const rivalesComunes = [...rivalesA].filter((clave) => rivalesB.has(clave)).length;
+    const h2h = cruces.filter((p) => Number.isFinite(p.golesFavor) && Number.isFinite(p.golesContra)).length;
+    const comparableDirecto = compartidas.length > 0;
+    const factor = comparableDirecto
+      ? 1
+      : Math.min(0.85, 0.10 + Math.min(0.50, rivalesComunes * 0.20) + Math.min(0.25, h2h * 0.08));
+    const muestra = Math.min(filasA.length, filasB.length);
+    const confianzaNumerica = factor * Math.min(1, muestra / 8);
+    const confianza = confianzaNumerica >= 0.70 ? "alta" : confianzaNumerica >= 0.40 ? "media" : "baja";
+    let motivo = "misma competición reciente";
+    if (!comparableDirecto && rivalesComunes) motivo = `${rivalesComunes} ${rivalesComunes === 1 ? "rival común" : "rivales comunes"}${h2h ? ` y ${h2h} H2H` : ""}`;
+    else if (!comparableDirecto && h2h) motivo = `${h2h} enfrentamientos directos, sin competición compartida`;
+    else if (!comparableDirecto) motivo = "rachas de contextos desconectados";
+    return { factor, confianza, confianzaNumerica: confianzaNumerica * 100, motivo, competicionesCompartidas: compartidas.length, rivalesComunes, h2h };
+  },
+
   /** Convierte dos tasas de gol en probabilidades 1X2 mediante dos Poisson
       independientes. El H2H ajusta como máximo un 15 % para que cruces
-      antiguos o muestras pequeñas no dominen la forma reciente. */
-  probabilidadesResultado(golesA, golesB, cruces = []) {
+      antiguos o muestras pequeñas no dominen la forma reciente. Cuando las
+      rachas no son comparables, ambas tasas regresan hacia su media neutral. */
+  probabilidadesResultado(golesA, golesB, cruces = [], comparabilidad = { factor: 1 }) {
     if (!Number.isFinite(golesA) || !Number.isFinite(golesB)) return null;
     const h2hValidos = cruces.filter((p) => Number.isFinite(p.golesFavor) && Number.isFinite(p.golesContra));
     const analisisH2hA = this.analizarSerie(h2hValidos, (p) => p.golesFavor);
     const analisisH2hB = this.analizarSerie(h2hValidos, (p) => p.golesContra);
     const pesoH2H = h2hValidos.length >= 2 ? Math.min(0.15, h2hValidos.length * 0.03) : 0;
     const ajustar = (base, h2h) => Math.max(0.05, Math.min(5, base * (1 - pesoH2H) + (h2h ?? base) * pesoH2H));
-    const lambdaA = ajustar(golesA, analisisH2hA?.mediaPonderada);
-    const lambdaB = ajustar(golesB, analisisH2hB?.mediaPonderada);
+    const tasaA = ajustar(golesA, analisisH2hA?.mediaPonderada);
+    const tasaB = ajustar(golesB, analisisH2hB?.mediaPonderada);
+    const neutral = (tasaA + tasaB) / 2;
+    const factorComparabilidad = Math.max(0, Math.min(1, comparabilidad.factor ?? 1));
+    const lambdaA = neutral + (tasaA - neutral) * factorComparabilidad;
+    const lambdaB = neutral + (tasaB - neutral) * factorComparabilidad;
     const poisson = (lambda) => {
       const valores = [Math.exp(-lambda)];
       for (let goles = 1; goles <= 10; goles++) valores.push(valores[goles - 1] * lambda / goles);
@@ -509,6 +543,12 @@ const Logica = {
       probMarcador: porcentaje(marcador.probabilidad),
       h2h: h2hValidos.length,
       pesoH2H: pesoH2H * 100,
+      comparabilidad: factorComparabilidad * 100,
+      confianza: comparabilidad.confianza || "alta",
+      confianzaNumerica: comparabilidad.confianzaNumerica ?? 100,
+      motivoComparabilidad: comparabilidad.motivo || "misma competición reciente",
+      rivalesComunes: comparabilidad.rivalesComunes || 0,
+      competicionesCompartidas: comparabilidad.competicionesCompartidas || 0,
     };
   },
 
@@ -539,7 +579,8 @@ const Logica = {
     const contextoB = filasResultadoB.length >= 3 ? filasResultadoB : filasB;
     const golesContextoA = combinar(ponderada(contextoA, (p) => p.golesFavor), ponderada(contextoB, (p) => p.golesContra));
     const golesContextoB = combinar(ponderada(contextoB, (p) => p.golesFavor), ponderada(contextoA, (p) => p.golesContra));
-    const resultado = this.probabilidadesResultado(golesContextoA, golesContextoB, cruces);
+    const comparabilidad = this.comparabilidadMuestras(contextoA, contextoB, cruces);
+    const resultado = this.probabilidadesResultado(golesContextoA, golesContextoB, cruces, comparabilidad);
     const tasaCombinada = (selector, linea) => {
       const a = this.analizarSerie(filasA, selector, linea)?.cumplimiento;
       const b = this.analizarSerie(filasB, selector, linea)?.cumplimiento;

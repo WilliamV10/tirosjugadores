@@ -45,12 +45,18 @@ const Vistas = {
     const dato = (etiqueta, valor, detalle, clase = "") => UI.el("div", { class: `proyeccion-dato ${clase}`.trim() }, [
       UI.el("span", {}, [etiqueta]), UI.el("strong", {}, [valor]), UI.el("small", {}, [detalle]),
     ]);
+    const resultadoConcluyente = p.resultado && p.resultado.confianza !== "baja";
     const grupos = {
-      resultado: p.resultado ? [
+      resultado: resultadoConcluyente ? [
         dato(`Gana · ${ladoA.equipo.displayName}`, porcentaje(p.resultado.victoriaA), cuotaResultado(p.resultado.victoriaA), "a"),
         dato("Empate", porcentaje(p.resultado.empate), cuotaResultado(p.resultado.empate), "central"),
         dato(`Gana · ${ladoB.equipo.displayName}`, porcentaje(p.resultado.victoriaB), cuotaResultado(p.resultado.victoriaB), "b"),
         dato("Marcador más probable", p.resultado.marcador, `${porcentaje(p.resultado.probMarcador)} individual`, "central"),
+      ] : p.resultado ? [
+        dato("Resultado 1X2", "No concluyente", "las muestras no permiten comparar fuerza absoluta", "central"),
+        dato(`Gana · ${ladoA.equipo.displayName}`, "–", "sin porcentaje fiable", "a"),
+        dato("Empate", "–", "sin porcentaje fiable", "central"),
+        dato(`Gana · ${ladoB.equipo.displayName}`, "–", "sin porcentaje fiable", "b"),
       ] : [dato("Resultado", "–", "No hay suficientes goles registrados", "central")],
       goles: [
         dato(`Goles · ${ladoA.equipo.displayName}`, numero(p.golesA), "ataque A + defensa B", "a"),
@@ -74,7 +80,7 @@ const Vistas = {
     };
     const items = grupos[vista] || grupos.goles;
     const titulos = { resultado: "Probabilidades estimadas 1X2", goles: "Proyección de goles", corners: "Proyección de córners", tiros: "Proyección de tiros" };
-    const barraResultado = vista === "resultado" && p.resultado
+    const barraResultado = vista === "resultado" && resultadoConcluyente
       ? UI.el("div", {
         class: "resultado-barra",
         role: "img",
@@ -86,13 +92,15 @@ const Vistas = {
       ])
       : null;
     const contextoResultado = vista === "resultado" && p.resultado
-      ? `Poisson independiente · ${ladoA.equipo.displayName}: ${p.muestraResultadoA} ${p.usaContextoLocal ? "como local" : "generales"} · ${ladoB.equipo.displayName}: ${p.muestraResultadoB} ${p.usaContextoVisita ? "como visitante" : "generales"} · H2H: ${p.resultado.h2h} (peso ${Formato.porcentaje(p.resultado.pesoH2H)}).`
+      ? `Confianza ${p.resultado.confianza} (${Formato.porcentaje(p.resultado.confianzaNumerica)}): ${p.resultado.motivoComparabilidad}. Comparabilidad ${Formato.porcentaje(p.resultado.comparabilidad)} · ${ladoA.equipo.displayName}: ${p.muestraResultadoA} ${p.usaContextoLocal ? "como local" : "generales"} · ${ladoB.equipo.displayName}: ${p.muestraResultadoB} ${p.usaContextoVisita ? "como visitante" : "generales"} · H2H: ${p.resultado.h2h} (peso ${Formato.porcentaje(p.resultado.pesoH2H)}).`
       : null;
     return UI.tarjeta(titulos[vista] || titulos.goles, [
       ...(barraResultado ? [barraResultado] : []),
       UI.el("div", { class: `proyeccion-grid vista-${vista}` }, items),
       UI.el("p", { class: "nota" }, [contextoResultado || "Estimación transparente basada en los partidos filtrados; no es xG ni garantiza un resultado."]),
-      ...(vista === "resultado" ? [UI.el("p", { class: "nota advertencia-modelo" }, ["No considera alineaciones, lesiones, sanciones, árbitro, descanso ni motivación competitiva. La independencia Poisson también puede desajustar empates de pocos goles. Es una referencia sin calibración histórica, no una recomendación de apuesta."])] : []),
+      ...(vista === "resultado" ? [UI.el("p", { class: "nota advertencia-modelo" }, [p.resultado?.confianza === "baja"
+        ? "Las rachas pertenecen a contextos poco comparables. El modelo oculta el 1X2 y el marcador probable porque una racha ganadora en una liga distinta no demuestra superioridad absoluta. Se necesitan competición compartida, rivales comunes o H2H suficientes."
+        : "No considera alineaciones, lesiones, sanciones, árbitro, descanso ni motivación competitiva. La independencia Poisson también puede desajustar empates de pocos goles. Es una referencia sin calibración histórica, no una recomendación de apuesta."])] : []),
     ], { clase: "proyeccion-panel" });
   },
 
