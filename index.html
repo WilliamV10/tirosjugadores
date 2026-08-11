@@ -118,8 +118,8 @@
         </svg>
       </span>
       <span class="modo-texto">
-        <span class="modo-titulo">Partidos de hoy</span>
-        <span class="modo-desc">Agenda por competición lista para analizar.</span>
+          <span class="modo-titulo">Partidos</span>
+          <span class="modo-desc">Agenda de hoy y mañana lista para analizar.</span>
       </span>
     </button>
   </nav>
@@ -170,12 +170,13 @@
       <button type="button" class="modal-cerrar" id="cerrar-proyeccion" aria-label="Cerrar proyección">×</button>
     </div>
     <div class="modal-tabs" role="tablist" aria-label="Apartado de proyección">
-      <button type="button" role="tab" class="modal-tab activo" data-vista="goles" aria-selected="true">Goles</button>
+      <button type="button" role="tab" class="modal-tab activo" data-vista="resultado" aria-selected="true">Resultado</button>
+      <button type="button" role="tab" class="modal-tab" data-vista="goles" aria-selected="false">Goles</button>
       <button type="button" role="tab" class="modal-tab" data-vista="corners" aria-selected="false">Córners</button>
       <button type="button" role="tab" class="modal-tab" data-vista="tiros" aria-selected="false">Tiros</button>
     </div>
     <div class="modal-controles">
-      <label id="control-linea-goles">Línea de goles
+      <label id="control-linea-goles" hidden>Línea de goles
         <select id="selector-proyeccion-goles">
           <option value="1.5">Más de 1,5</option>
           <option value="2.5" selected>Más de 2,5</option>

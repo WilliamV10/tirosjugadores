@@ -41,10 +41,17 @@ const Vistas = {
     const frecuencia = (valor) => valor === null
       ? "sin datos"
       : `${porcentaje(valor)} · justa ${valor ? Formato.numero(100 / valor) : "–"}`;
+    const cuotaResultado = (valor) => valor ? `cuota justa ${Formato.numero(100 / valor)}` : "sin cuota calculable";
     const dato = (etiqueta, valor, detalle, clase = "") => UI.el("div", { class: `proyeccion-dato ${clase}`.trim() }, [
       UI.el("span", {}, [etiqueta]), UI.el("strong", {}, [valor]), UI.el("small", {}, [detalle]),
     ]);
     const grupos = {
+      resultado: p.resultado ? [
+        dato(`Gana · ${ladoA.equipo.displayName}`, porcentaje(p.resultado.victoriaA), cuotaResultado(p.resultado.victoriaA), "a"),
+        dato("Empate", porcentaje(p.resultado.empate), cuotaResultado(p.resultado.empate), "central"),
+        dato(`Gana · ${ladoB.equipo.displayName}`, porcentaje(p.resultado.victoriaB), cuotaResultado(p.resultado.victoriaB), "b"),
+        dato("Marcador más probable", p.resultado.marcador, `${porcentaje(p.resultado.probMarcador)} individual`, "central"),
+      ] : [dato("Resultado", "–", "No hay suficientes goles registrados", "central")],
       goles: [
         dato(`Goles · ${ladoA.equipo.displayName}`, numero(p.golesA), "ataque A + defensa B", "a"),
         dato("Total de goles", numero(p.totalGoles), `+${String(p.lineaGoles).replace(".", ",")}: ${frecuencia(p.probGoles)}`, "central"),
@@ -66,10 +73,26 @@ const Vistas = {
       ],
     };
     const items = grupos[vista] || grupos.goles;
-    const titulos = { goles: "Proyección de goles", corners: "Proyección de córners", tiros: "Proyección de tiros" };
+    const titulos = { resultado: "Probabilidades estimadas 1X2", goles: "Proyección de goles", corners: "Proyección de córners", tiros: "Proyección de tiros" };
+    const barraResultado = vista === "resultado" && p.resultado
+      ? UI.el("div", {
+        class: "resultado-barra",
+        role: "img",
+        "aria-label": `${porcentaje(p.resultado.victoriaA)} victoria local, ${porcentaje(p.resultado.empate)} empate y ${porcentaje(p.resultado.victoriaB)} victoria visitante`,
+      }, [
+        UI.el("span", { class: "resultado-segmento a", style: `width:${p.resultado.victoriaA}%` }, [porcentaje(p.resultado.victoriaA)]),
+        UI.el("span", { class: "resultado-segmento empate", style: `width:${p.resultado.empate}%` }, [porcentaje(p.resultado.empate)]),
+        UI.el("span", { class: "resultado-segmento b", style: `width:${p.resultado.victoriaB}%` }, [porcentaje(p.resultado.victoriaB)]),
+      ])
+      : null;
+    const contextoResultado = vista === "resultado" && p.resultado
+      ? `Poisson independiente · ${ladoA.equipo.displayName}: ${p.muestraResultadoA} ${p.usaContextoLocal ? "como local" : "generales"} · ${ladoB.equipo.displayName}: ${p.muestraResultadoB} ${p.usaContextoVisita ? "como visitante" : "generales"} · H2H: ${p.resultado.h2h} (peso ${Formato.porcentaje(p.resultado.pesoH2H)}).`
+      : null;
     return UI.tarjeta(titulos[vista] || titulos.goles, [
+      ...(barraResultado ? [barraResultado] : []),
       UI.el("div", { class: `proyeccion-grid vista-${vista}` }, items),
-      UI.el("p", { class: "nota" }, ["Estimación transparente basada en los partidos filtrados; no es xG ni garantiza un resultado."]),
+      UI.el("p", { class: "nota" }, [contextoResultado || "Estimación transparente basada en los partidos filtrados; no es xG ni garantiza un resultado."]),
+      ...(vista === "resultado" ? [UI.el("p", { class: "nota advertencia-modelo" }, ["No considera alineaciones, lesiones, sanciones, árbitro, descanso ni motivación competitiva. La independencia Poisson también puede desajustar empates de pocos goles. Es una referencia sin calibración histórica, no una recomendación de apuesta."])] : []),
     ], { clase: "proyeccion-panel" });
   },
 
@@ -332,48 +355,100 @@ const Vistas = {
   /* ============================================================
      Vista 4 — agenda diaria por competición
      ============================================================ */
-  hoy(ligas, alAnalizar) {
+  hoy(ligas, alAnalizar, { dia = 0, alCambiarDia = () => {} } = {}) {
     const total = ligas.reduce((suma, liga) => suma + liga.partidos.length, 0);
     const pendientes = ligas.reduce((suma, liga) => suma + liga.partidos.filter((p) => p.estado === "pre").length, 0);
+    const enVivoAhora = ligas.reduce((suma, liga) => suma + liga.partidos.filter((p) => p.estado === "in").length, 0);
+    const proximo = ligas.flatMap((liga) => liga.partidos)
+      .filter((p) => p.estado === "pre" && p.fecha > new Date())
+      .sort((a, b) => a.fecha - b.fecha)[0] || null;
     const selectorLiga = UI.el("select", { class: "agenda-filtro", "aria-label": "Filtrar agenda por competición" }, [
       UI.el("option", { value: "todas" }, ["Todas las competiciones"]),
       ...ligas.map((liga) => UI.el("option", { value: liga.id }, [`${liga.nombre} (${liga.partidos.length})`])),
     ]);
-    const cabecera = UI.tarjeta("Partidos de hoy", [
+    const selectorMuestra = UI.el("select", { class: "agenda-filtro agenda-muestra", "aria-label": "Partidos usados al proyectar" }, [
+      ...[5, 10, 15, 20].map((n) => UI.el("option", { value: n }, [`Muestra: últimos ${n}`])),
+    ]);
+    selectorMuestra.value = UI.refs.selector().value;
+    selectorMuestra.addEventListener("change", () => { UI.refs.selector().value = selectorMuestra.value; });
+    const selectorDia = UI.el("div", { class: "agenda-dias", role: "group", "aria-label": "Día de la agenda" },
+      [[0, "Hoy"], [1, "Mañana"]].map(([valor, texto]) => {
+        const boton = UI.el("button", {
+          type: "button",
+          class: valor === dia ? "activo" : "",
+          "aria-pressed": valor === dia ? "true" : "false",
+        }, [texto]);
+        boton.addEventListener("click", () => { if (valor !== dia) alCambiarDia(valor); });
+        return boton;
+      }));
+    const cabecera = UI.el("section", { class: "agenda-encabezado" }, [
+      UI.el("div", { class: "agenda-titulo-fila" }, [
+        UI.el("div", {}, [
+          UI.el("h1", {}, [dia === 1 ? "Partidos de mañana" : "Partidos de hoy"]),
+          UI.el("p", {}, [`${total} encuentros · ${ligas.length} competiciones · datos de ESPN`]),
+        ]),
+        UI.el("div", { class: "agenda-controles" }, [selectorDia, selectorLiga, selectorMuestra]),
+      ]),
       UI.el("div", { class: "agenda-resumen" }, [
         UI.el("div", {}, [UI.el("strong", {}, [String(total)]), UI.el("span", {}, ["partidos publicados"])]),
         UI.el("div", {}, [UI.el("strong", {}, [String(ligas.length)]), UI.el("span", {}, ["competiciones"])]),
-        UI.el("div", {}, [UI.el("strong", {}, [String(pendientes)]), UI.el("span", {}, ["por comenzar"])]),
+        UI.el("div", {}, [UI.el("strong", {}, [String(enVivoAhora)]), UI.el("span", {}, ["en vivo ahora"])]),
+        UI.el("div", {}, [UI.el("strong", {}, [proximo ? Formato.hora(proximo.fecha) : "–"]), UI.el("span", {}, [proximo ? "próximo inicio" : `${pendientes} por comenzar`])]),
       ]),
-      UI.el("p", { class: "nota" }, ["Elige un encuentro para cargar la forma reciente de ambos equipos y abrir su proyección."]),
-    ], { clase: "agenda-cabecera", derecha: selectorLiga });
+    ]);
 
-    const bloques = ligas.map((liga) => {
+    const primeraAbierta = Math.max(0, ligas.findIndex((liga) => liga.partidos.some((p) => p.estado === "in")));
+    const bloques = ligas.map((liga, indiceLiga) => {
       const partidos = liga.partidos.map((partido) => {
         const terminado = partido.estado === "post";
         const enVivo = partido.estado === "in";
         const estado = enVivo ? "En vivo" : terminado ? (partido.detalleEstado || "Final") : Formato.hora(partido.fecha);
-        const equipo = (datos) => UI.el("div", { class: "agenda-equipo" }, [
+        const equipo = (datos, mostrarScore) => UI.el("div", { class: "agenda-equipo" }, [
           UI.avatar(datos.logo, datos.displayName, { escudo: true }),
-          UI.el("span", {}, [datos.displayName]),
+          UI.el("span", { class: "agenda-equipo-nombre" }, [datos.displayName]),
+          ...(mostrarScore ? [UI.el("strong", { class: "agenda-equipo-score" }, [datos.score ?? "–"])] : []),
         ]);
-        const boton = UI.el("button", { type: "button", class: "agenda-analizar" }, [terminado ? "Comparar" : "Analizar y proyectar"]);
+        const boton = UI.el("button", { type: "button", class: "agenda-analizar" }, ["Ver informe"]);
         boton.addEventListener("click", () => alAnalizar(partido, liga));
         return UI.el("div", { class: "agenda-partido" }, [
-          UI.el("div", { class: `agenda-estado ${enVivo ? "en-vivo" : terminado ? "final" : ""}`.trim() }, [estado]),
-          UI.el("div", { class: "agenda-equipos" }, [equipo(partido.local), equipo(partido.visitante)]),
-          ...(partido.marcador && (enVivo || terminado) ? [UI.el("strong", { class: "agenda-marcador" }, [partido.marcador])] : []),
+          UI.el("div", { class: `agenda-estado ${enVivo ? "en-vivo" : terminado ? "final" : ""}`.trim() }, [
+            UI.el("strong", {}, [estado]),
+            UI.el("small", {}, [enVivo ? (partido.detalleEstado || "actualizando") : terminado ? "FT" : "programado"]),
+          ]),
+          UI.el("div", { class: "agenda-equipos" }, [equipo(partido.local, enVivo || terminado), equipo(partido.visitante, enVivo || terminado)]),
+          UI.el("div", { class: "agenda-disponible" }, [
+            UI.el("strong", {}, ["Forma + H2H"]),
+            UI.el("span", {}, ["proyección bajo demanda"]),
+          ]),
           boton,
         ]);
       });
-      const bloque = UI.tarjeta(`${liga.nombre} · ${liga.partidos.length}`, UI.el("div", { class: "agenda-lista" }, partidos), { clase: "agenda-liga" });
+      const resumen = UI.el("summary", { class: "agenda-liga-resumen" }, [
+        UI.el("span", { class: "agenda-liga-titulo" }, [liga.nombre]),
+        UI.el("span", { class: "agenda-liga-cantidad" }, [`${liga.partidos.length} ${liga.partidos.length === 1 ? "partido" : "partidos"}`]),
+        UI.el("span", { class: "agenda-liga-flecha", "aria-hidden": "true" }, ["⌄"]),
+      ]);
+      const atributos = { class: "tarjeta agenda-liga" };
+      if (indiceLiga === primeraAbierta) atributos.open = "";
+      const bloque = UI.el("details", atributos, [
+        resumen,
+        UI.el("div", { class: "agenda-liga-contenido" }, [UI.el("div", { class: "agenda-lista" }, partidos)]),
+      ]);
       bloque.dataset.liga = liga.id;
       return bloque;
     });
     selectorLiga.addEventListener("change", () => {
-      for (const bloque of bloques) bloque.hidden = selectorLiga.value !== "todas" && bloque.dataset.liga !== selectorLiga.value;
+      for (const bloque of bloques) {
+        const coincide = selectorLiga.value === "todas" || bloque.dataset.liga === selectorLiga.value;
+        bloque.hidden = !coincide;
+        if (selectorLiga.value !== "todas" && coincide) bloque.open = true;
+      }
     });
-    this.pintar(cabecera, bloques);
+    this.pintar(cabecera, bloques.length ? bloques : UI.tarjeta("Sin encuentros publicados", [
+      UI.el("p", { class: "nota" }, [dia === 1
+        ? "ESPN todavía no ha publicado partidos para mañana. Puedes volver a Hoy desde el selector superior."
+        : "ESPN no tiene encuentros publicados para hoy."]),
+    ], { clase: "agenda-vacia" }));
   },
 
   /* ============================================================
@@ -510,7 +585,7 @@ const Vistas = {
   /** Dos columnas con los ultimos partidos de cada equipo. */
   detallePorEquipo(ladoA, ladoB) {
     const columna = (datos, letra) => {
-      const filas = datos.filas.slice(0, 5).map((p) => UI.el("tr", {}, [
+      const crearFila = (p) => UI.el("tr", {}, [
         UI.el("td", { class: "tenue" }, [Formato.fechaCorta(p.fecha)]),
         UI.celdaSede(p.enCasa),
         UI.el("td", {}, [p.rival]),
@@ -518,13 +593,14 @@ const Vistas = {
         UI.celdaResultado(p.resultado),
         UI.el("td", { class: "num destacado" }, [`${p.golesFavor}-${p.golesContra}`]),
         UI.el("td", { class: "num" }, [p.cornersFavor === null ? "–" : `${p.cornersFavor}-${p.cornersContra}`]),
-      ]));
+      ]);
       return UI.el("div", { class: "tarjeta columna-equipo" }, [
         UI.el("h3", {}, [UI.el("span", { class: `punto ${letra}` }), datos.equipo.displayName]),
-        UI.tabla(
+        UI.tablaPaginada(
           ["Fecha", "Sede", "Rival", "Competición", "Res", { texto: "Goles", num: true }, { texto: "Córners", num: true }],
-          filas,
-          { clase: "mini-tabla" },
+          datos.filas,
+          crearFila,
+          { clase: "mini-tabla", porPagina: 5, etiqueta: "partidos" },
         ),
       ]);
     };

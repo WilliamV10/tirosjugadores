@@ -338,6 +338,54 @@ const UI = {
     ]);
   },
 
+  /** Tabla paginada reutilizable. Recibe los datos originales y una fábrica
+      de filas para crear únicamente los nodos visibles de cada página. */
+  tablaPaginada(cabeceras, datos, crearFila, { clase = "", porPagina = 5, etiqueta = "registros" } = {}) {
+    const encabezado = this.el("tr", {}, cabeceras.map((c) => {
+      const { texto, num } = typeof c === "string" ? { texto: c, num: false } : c;
+      return this.el("th", num ? { class: "num" } : {}, [texto]);
+    }));
+    const cuerpo = this.el("tbody");
+    const tabla = this.el("div", { class: "tabla-envoltura" }, [
+      this.el("table", clase ? { class: clase } : {}, [this.el("thead", {}, [encabezado]), cuerpo]),
+    ]);
+    const anterior = this.el("button", { type: "button", class: "paginador-flecha", "aria-label": "Página anterior" }, ["‹"]);
+    const siguiente = this.el("button", { type: "button", class: "paginador-flecha", "aria-label": "Página siguiente" }, ["›"]);
+    const paginas = this.el("div", { class: "paginador-paginas" });
+    const informacion = this.el("span", { class: "paginador-info" });
+    const totalPaginas = Math.max(1, Math.ceil(datos.length / porPagina));
+    const controles = this.el("div", { class: "paginador-controles" }, [anterior, paginas, siguiente]);
+    controles.hidden = totalPaginas <= 1;
+    let pagina = 0;
+
+    const render = () => {
+      const inicio = pagina * porPagina;
+      const fin = Math.min(inicio + porPagina, datos.length);
+      cuerpo.replaceChildren(...datos.slice(inicio, fin).map(crearFila));
+      informacion.textContent = datos.length ? `${inicio + 1}–${fin} de ${datos.length} ${etiqueta}` : `0 ${etiqueta}`;
+      anterior.disabled = pagina === 0;
+      siguiente.disabled = pagina >= totalPaginas - 1;
+      paginas.replaceChildren(...Array.from({ length: totalPaginas }, (_, indice) => {
+        const boton = this.el("button", {
+          type: "button",
+          class: indice === pagina ? "paginador-pagina activo" : "paginador-pagina",
+          "aria-label": `Ir a la página ${indice + 1}`,
+          "aria-current": indice === pagina ? "page" : "false",
+        }, [String(indice + 1)]);
+        boton.addEventListener("click", () => { pagina = indice; render(); });
+        return boton;
+      }));
+    };
+    anterior.addEventListener("click", () => { if (pagina > 0) { pagina--; render(); } });
+    siguiente.addEventListener("click", () => { if (pagina < totalPaginas - 1) { pagina++; render(); } });
+    const navegacion = this.el("nav", { class: "paginador", "aria-label": `Paginación de ${etiqueta}` }, [
+      informacion,
+      controles,
+    ]);
+    render();
+    return this.el("div", { class: "tabla-paginada" }, [tabla, navegacion]);
+  },
+
   /* ---------- Grafico de columnas apiladas (generico) ----------
      filas: [{ fecha, azul, claro, tooltip: { titulo, sub, lineas } }]
      El azul es la metrica principal (abajo), el claro la secundaria (arriba). */

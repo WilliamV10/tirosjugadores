@@ -161,6 +161,7 @@ const Logica = {
           displayName: dato.displayName,
           abbreviation: dato.abbreviation || "",
           logo: dato.logo || "",
+          score: dato.score !== undefined ? String(dato.score) : null,
         });
         return {
           eventId: String(evento.id),
@@ -463,9 +464,64 @@ const Logica = {
     };
   },
 
+  /** Convierte dos tasas de gol en probabilidades 1X2 mediante dos Poisson
+      independientes. El H2H ajusta como máximo un 15 % para que cruces
+      antiguos o muestras pequeñas no dominen la forma reciente. */
+  probabilidadesResultado(golesA, golesB, cruces = []) {
+    if (!Number.isFinite(golesA) || !Number.isFinite(golesB)) return null;
+    const h2hValidos = cruces.filter((p) => Number.isFinite(p.golesFavor) && Number.isFinite(p.golesContra));
+    const analisisH2hA = this.analizarSerie(h2hValidos, (p) => p.golesFavor);
+    const analisisH2hB = this.analizarSerie(h2hValidos, (p) => p.golesContra);
+    const pesoH2H = h2hValidos.length >= 2 ? Math.min(0.15, h2hValidos.length * 0.03) : 0;
+    const ajustar = (base, h2h) => Math.max(0.05, Math.min(5, base * (1 - pesoH2H) + (h2h ?? base) * pesoH2H));
+    const lambdaA = ajustar(golesA, analisisH2hA?.mediaPonderada);
+    const lambdaB = ajustar(golesB, analisisH2hB?.mediaPonderada);
+    const poisson = (lambda) => {
+      const valores = [Math.exp(-lambda)];
+      for (let goles = 1; goles <= 10; goles++) valores.push(valores[goles - 1] * lambda / goles);
+      return valores;
+    };
+    const a = poisson(lambdaA);
+    const b = poisson(lambdaB);
+    let victoriaA = 0;
+    let empate = 0;
+    let victoriaB = 0;
+    let masa = 0;
+    let marcador = { a: 0, b: 0, probabilidad: 0 };
+    for (let golesLocal = 0; golesLocal < a.length; golesLocal++) {
+      for (let golesVisita = 0; golesVisita < b.length; golesVisita++) {
+        const probabilidad = a[golesLocal] * b[golesVisita];
+        masa += probabilidad;
+        if (golesLocal > golesVisita) victoriaA += probabilidad;
+        else if (golesLocal === golesVisita) empate += probabilidad;
+        else victoriaB += probabilidad;
+        if (probabilidad > marcador.probabilidad) marcador = { a: golesLocal, b: golesVisita, probabilidad };
+      }
+    }
+    const porcentaje = (valor) => masa ? (valor / masa) * 100 : 0;
+    return {
+      victoriaA: porcentaje(victoriaA),
+      empate: porcentaje(empate),
+      victoriaB: porcentaje(victoriaB),
+      lambdaA,
+      lambdaB,
+      marcador: `${marcador.a}-${marcador.b}`,
+      probMarcador: porcentaje(marcador.probabilidad),
+      h2h: h2hValidos.length,
+      pesoH2H: pesoH2H * 100,
+    };
+  },
+
   /** Cruza ataque propio con defensa rival; es una estimacion basada en
       medias ponderadas, no xG ni una garantia de resultado. */
-  proyectarPartido(filasA, filasB, { lineaGoles = 2.5, lineaCorners = 9.5 } = {}) {
+  proyectarPartido(filasA, filasB, opciones = {}) {
+    const {
+      lineaGoles = 2.5,
+      lineaCorners = 9.5,
+      filasResultadoA = [],
+      filasResultadoB = [],
+      cruces = [],
+    } = opciones;
     const ponderada = (filas, selector) => this.analizarSerie(filas, selector)?.mediaPonderada ?? null;
     const combinar = (ataque, defensa) => ataque === null || defensa === null ? null : (ataque + defensa) / 2;
     const golesA = combinar(ponderada(filasA, (p) => p.golesFavor), ponderada(filasB, (p) => p.golesContra));
@@ -479,6 +535,11 @@ const Logica = {
     // un ajuste defensivo.
     const tirosPuertaA = ponderada(filasA, (p) => p.tirosPuerta);
     const tirosPuertaB = ponderada(filasB, (p) => p.tirosPuerta);
+    const contextoA = filasResultadoA.length >= 3 ? filasResultadoA : filasA;
+    const contextoB = filasResultadoB.length >= 3 ? filasResultadoB : filasB;
+    const golesContextoA = combinar(ponderada(contextoA, (p) => p.golesFavor), ponderada(contextoB, (p) => p.golesContra));
+    const golesContextoB = combinar(ponderada(contextoB, (p) => p.golesFavor), ponderada(contextoA, (p) => p.golesContra));
+    const resultado = this.probabilidadesResultado(golesContextoA, golesContextoB, cruces);
     const tasaCombinada = (selector, linea) => {
       const a = this.analizarSerie(filasA, selector, linea)?.cumplimiento;
       const b = this.analizarSerie(filasB, selector, linea)?.cumplimiento;
@@ -493,6 +554,11 @@ const Logica = {
       probGoles: tasaCombinada((p) => p.golesFavor + p.golesContra, lineaGoles),
       probCorners: tasaCombinada((p) => p.cornersFavor === null ? NaN : p.cornersFavor + p.cornersContra, lineaCorners),
       probAmbos: tasaCombinada((p) => p.golesFavor > 0 && p.golesContra > 0 ? 1 : 0, 0.5),
+      resultado,
+      muestraResultadoA: contextoA.length,
+      muestraResultadoB: contextoB.length,
+      usaContextoLocal: filasResultadoA.length >= 3,
+      usaContextoVisita: filasResultadoB.length >= 3,
       lineaGoles, lineaCorners,
     };
   },

@@ -8,7 +8,7 @@ Herramienta con **cinco modos de consulta** pensados para mercados de apuestas:
 4. **Comparar dos equipos** — se escribe «América vs Tigres» y se enfrentan sus promedios
    (puntos, goles, córners, tiros, tiros a puerta y posesión) en barras cara a cara, más el
    historial de enfrentamientos directos.
-5. **Partidos de hoy** — agenda agrupada por competición, con acceso directo al análisis
+5. **Partidos** — agenda de hoy y mañana agrupada por competición, con acceso directo al análisis
    y la proyección de cada encuentro.
 
 > **Sobre los goles esperados (xG):** la API pública de ESPN **no los publica** — se
@@ -169,12 +169,17 @@ También existe un filtro local de **competición**. Sus opciones se construyen 
 partidos ya precargados y se aplican antes del filtro de sede y del recorte a los
 últimos N; cambiarlo no genera llamadas a ESPN.
 
-La vista **Partidos de hoy** utiliza una sola respuesta agrupada de ESPN para construir
-la agenda por competición, con hora, estado en vivo/final, marcador y escudos. Su filtro
+La vista **Partidos** utiliza una respuesta agrupada de ESPN por fecha para construir
+las agendas de hoy y mañana por competición, con hora, estado en vivo/final, marcador y escudos. Su filtro
 de competición funciona en memoria. Al elegir un encuentro, la aplicación identifica la
 liga habitual de ambos clubes y reutiliza el comparador y el modal de proyección; esto
 evita tratar una copa ocasional como si fuera toda la historia reciente del equipo. La
 muestra se configura automáticamente con el equipo A como local y el B como visitante.
+Las competiciones funcionan como acordeones independientes y la que tenga partidos en
+vivo se abre primero. Tras cargar, la vista vuelve al inicio de la agenda también en móvil.
+El encabezado reúne partidos publicados, competiciones, encuentros en vivo y próximo
+inicio; los controles de competición y tamaño de muestra quedan visibles sin abrir el
+buscador. Cada partido ocupa una fila completa con estado, equipos, marcador y acción.
 
 ### Probabilidades, tendencia y distribución
 
@@ -194,7 +199,7 @@ gol, goles por tiro a puerta, racha actual sobre la línea, partidos sin rematar
 distribución de 0, 1, 2 o 3+ remates en la muestra seleccionada.
 
 En el comparador, el botón **Ver proyección** abre un modal separado para no recargar la
-pantalla principal. Dentro hay tres apartados —Goles, Córners y Tiros— que se muestran
+pantalla principal. Dentro hay cuatro apartados —Resultado, Goles, Córners y Tiros— que se muestran
 uno a la vez, además de sus líneas configurables. La proyección cruza el ataque ponderado de un equipo con
 la defensa ponderada del rival:
 
@@ -208,6 +213,21 @@ Se calcula lo mismo para B y se muestran tiros totales y tiros a puerta por sepa
 sus totales combinados, la frecuencia histórica de las líneas
 configuradas de goles y córners y **ambos equipos marcan**, con su cuota justa empírica.
 Todo responde a los filtros actuales de competición, sede y número de partidos.
+
+Las dos tablas de forma reciente del comparador usan un componente reutilizable de
+**tabla paginada**. Enseñan cinco partidos por página, conservan todos los partidos de
+la muestra seleccionada y tienen navegación independiente para cada equipo. Cambiar de
+página opera únicamente sobre los datos en memoria.
+
+El apartado **Resultado** transforma las tasas de gol en porcentajes de victoria local,
+empate y victoria visitante mediante dos distribuciones Poisson independientes. Para
+esta vista usa específicamente la forma de A como local y B como visitante (mínimo 3
+partidos; si no alcanza, usa la muestra general). Los enfrentamientos directos ajustan
+las tasas con un peso progresivo limitado al **15 %**, evitando que partidos antiguos
+dominen la forma reciente. También muestra cuotas justas, marcador más probable, tamaño de
+muestra y peso H2H. Los porcentajes suman 100 %, pero aún no están calibrados mediante
+backtesting y omiten alineaciones, bajas, árbitro, descanso y contexto competitivo.
+Además, la independencia Poisson puede desajustar la probabilidad de empates con pocos goles.
 
 > Estas cifras son resúmenes y estimaciones transparentes de la muestra, no xG ni
 > probabilidades calibradas. La cuota justa sirve para comparar una frecuencia con una

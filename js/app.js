@@ -9,8 +9,10 @@ const App = {
     jugador: null,          // { candidato, id, filas }
     equipo: null,           // { equipo, id, filas }
     duelo: null,            // { a: lado, b: lado }
-    agenda: null,           // ligas y partidos del día
-    vistaProyeccion: "goles",
+    agenda: null,           // ligas y partidos del día visible
+    agendaDia: 0,           // 0 = hoy, 1 = mañana
+    agendas: {},            // agendas normalizadas por fecha; evita repetir peticiones
+    vistaProyeccion: "resultado",
   },
 
   init() {
@@ -85,33 +87,61 @@ const App = {
     else this.render(); // si ya hay datos en cache para este modo, se pintan directamente
   },
 
-  fechaLocalYmd() {
-    const hoy = new Date();
-    return [hoy.getFullYear(), String(hoy.getMonth() + 1).padStart(2, "0"), String(hoy.getDate()).padStart(2, "0")].join("");
+  fechaLocalYmd(desplazamiento = 0) {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() + desplazamiento);
+    return [fecha.getFullYear(), String(fecha.getMonth() + 1).padStart(2, "0"), String(fecha.getDate()).padStart(2, "0")].join("");
   },
 
   async cargarPartidosHoy() {
+    return this.cargarAgenda(0);
+  },
+
+  async cargarAgenda(dia = 0) {
+    const etiqueta = dia === 1 ? "mañana" : "hoy";
+    const fecha = this.fechaLocalYmd(dia);
+    this.estado.agendaDia = dia;
+    if (this.estado.agendas[fecha]) {
+      this.estado.agenda = this.estado.agendas[fecha];
+      UI.mostrarEstado("");
+      this.render();
+      this.subirAAgenda();
+      return;
+    }
     UI.limpiar();
     UI.mostrarEsqueleto();
-    UI.mostrarEstado("Consultando los partidos de hoy…", { cargando: true });
+    UI.mostrarEstado(`Consultando los partidos de ${etiqueta}…`, { cargando: true });
     try {
-      const { resultado: ligas, peticiones, fallos } = await this.midiendo(() => Datos.partidosDelDia(this.fechaLocalYmd()));
+      const { resultado: ligas, peticiones, fallos } = await this.midiendo(() => Datos.partidosDelDia(fecha));
       if (!ligas) {
-        this.avisarVacio(fallos, "ESPN no devolvió la agenda de hoy.");
+        this.avisarVacio(fallos, `ESPN no devolvió la agenda de ${etiqueta}.`);
         return;
       }
+      this.estado.agendas[fecha] = ligas;
       this.estado.agenda = ligas;
       const total = ligas.reduce((suma, liga) => suma + liga.partidos.length, 0);
       if (!total) {
-        this.avisarVacio(fallos, "No hay partidos de fútbol publicados para hoy.");
+        UI.mostrarEstado(`No hay partidos de fútbol publicados para ${etiqueta}.`);
+        this.render();
+        this.subirAAgenda();
         return;
       }
       this.anunciarCoste(total, peticiones);
       this.render();
+      this.subirAAgenda();
     } catch (error) {
       UI.limpiar();
       UI.mostrarEstado(`Error al cargar la agenda: ${error.message}`, { error: true });
     }
+  },
+
+  subirAAgenda() {
+    // Al sustituir contenido, algunos navegadores móviles conservan el anclaje inferior.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const resultados = UI.refs.resultados();
+      const destino = resultados.getBoundingClientRect().top + window.scrollY - 76;
+      window.scrollTo({ top: Math.max(0, destino), behavior: "auto" });
+    }));
   },
 
   async analizarPartidoHoy(partido, liga) {
@@ -433,10 +463,18 @@ const App = {
       const filas = this.filtrar(datos.filas, { lado: letra }).slice(0, cuantos);
       return { ...datos, filas, perfil: Logica.perfil(filas) };
     };
+    const soloCompeticion = (filas) => this.filtrarCompeticion(filas);
+    const localesA = soloCompeticion(duelo.a.filas).filter((fila) => fila.enCasa).slice(0, cuantos);
+    const visitasB = soloCompeticion(duelo.b.filas).filter((fila) => !fila.enCasa).slice(0, cuantos);
+    const cruces = soloCompeticion(duelo.cruces || []);
+    const crucesMismaSede = cruces.filter((fila) => fila.enCasa);
     const panel = Vistas.panelProyeccion(lado(duelo.a, "a"), lado(duelo.b, "b"), {
       lineaGoles: Number(UI.refs.selectorProyeccionGoles().value),
       lineaCorners: Number(UI.refs.selectorProyeccionCorners().value),
       vista: this.estado.vistaProyeccion,
+      filasResultadoA: localesA,
+      filasResultadoB: visitasB,
+      cruces: crucesMismaSede.length >= 2 ? crucesMismaSede : cruces,
     });
     UI.refs.contenidoProyeccion().replaceChildren(panel);
   },
@@ -490,7 +528,11 @@ const App = {
       );
       if (UI.refs.modalProyeccion().open) this.renderProyeccion();
     } else if (modo === "hoy" && this.estado.agenda) {
-      Vistas.hoy(this.estado.agenda, (partido, liga) => this.analizarPartidoHoy(partido, liga));
+      Vistas.hoy(
+        this.estado.agenda,
+        (partido, liga) => this.analizarPartidoHoy(partido, liga),
+        { dia: this.estado.agendaDia, alCambiarDia: (dia) => this.cargarAgenda(dia) },
+      );
     }
   },
 };
