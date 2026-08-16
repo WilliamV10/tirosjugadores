@@ -16,6 +16,7 @@ const App = {
   },
 
   init() {
+    FuenteLocal.indice().then((indice) => UI.mostrarFuente(indice));
     for (const boton of UI.refs.modos().querySelectorAll(".modo")) {
       boton.addEventListener("click", () => this.seleccionarModo(boton.dataset.modo));
     }
@@ -269,7 +270,7 @@ const App = {
         return;
       }
       this.estado.jugador = { candidato, id, filas };
-      this.anunciarCoste(filas.length, peticiones);
+      this.anunciarCoste(filas.length, peticiones, resultado.origen);
       this.render();
     } catch (error) {
       UI.limpiar();
@@ -425,14 +426,16 @@ const App = {
       tramosUsados: resultado.recientes.tramosUsados,
     };
     UI.refs.botonProyeccion().disabled = false;
-    this.anunciarCoste(filasA.length + filasB.length, peticiones);
+    this.anunciarCoste(filasA.length + filasB.length, peticiones, resultado.recientes.origen);
     this.render();
   },
 
   /** Deja claro lo que costó: peticiones reales y cuántas se ahorraron. */
-  anunciarCoste(partidos, peticiones) {
-    if (!peticiones) {
-      UI.mostrarEstado(`${partidos} partidos servidos desde datos locales, sin pedir nada a ESPN.`);
+  anunciarCoste(partidos, peticiones, origen = null) {
+    if (origen === "json") {
+      UI.mostrarEstado(`${partidos} partidos servidos desde JSON publicado, sin pedir nada a ESPN.`);
+    } else if (!peticiones) {
+      UI.mostrarEstado(`${partidos} partidos servidos desde caché de sesión, sin pedir nada a ESPN.`);
     } else {
       UI.mostrarEstado(`${partidos} partidos con ${peticiones} ${peticiones === 1 ? "petición" : "peticiones"} a ESPN.`);
     }

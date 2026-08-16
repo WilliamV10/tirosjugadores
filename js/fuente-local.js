@@ -9,7 +9,7 @@ const FuenteLocal = {
   async indice() {
     if (this._indice !== undefined) return this._indice;
     try {
-      const respuesta = await fetch("datos/indice.json", { cache: "no-cache" });
+      const respuesta = await fetch("datos/indice.json", { cache: "no-store" });
       this._indice = respuesta.ok ? await respuesta.json() : null;
     } catch {
       this._indice = null;
@@ -19,7 +19,8 @@ const FuenteLocal = {
 
   async archivo(ruta) {
     if (!this._archivos.has(ruta)) {
-      this._archivos.set(ruta, fetch(`datos/${ruta}`).then((r) => {
+      const version = encodeURIComponent(this._indice?.generadoEn || "1");
+      this._archivos.set(ruta, fetch(`datos/${ruta}?v=${version}`, { cache: "no-cache" }).then((r) => {
         if (!r.ok) throw new Error(`JSON local ${r.status}`);
         return r.json();
       }).catch(() => null));

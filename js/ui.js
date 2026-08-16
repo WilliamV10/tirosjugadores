@@ -56,6 +56,7 @@ const UI = {
     boton: () => document.getElementById("boton-buscar"),
     ejemplos: () => document.getElementById("ejemplos"),
     estado: () => document.getElementById("estado"),
+    fuenteDatos: () => document.getElementById("fuente-datos"),
     candidatos: () => document.getElementById("candidatos"),
     resultados: () => document.getElementById("resultados"),
     tooltip: () => document.getElementById("tooltip"),
@@ -69,6 +70,21 @@ const UI = {
     nodo.classList.toggle("error", error);
     nodo.classList.toggle("cargando", cargando);
     nodo.hidden = !mensaje;
+  },
+
+  mostrarFuente(indice) {
+    const nodo = this.refs.fuenteDatos();
+    if (!nodo) return;
+    const punto = this.el("span", { class: "punto-vivo" });
+    if (!indice) {
+      nodo.replaceChildren(punto, "ESPN · respaldo de red");
+      nodo.title = "No se pudo cargar datos/indice.json";
+      return;
+    }
+    const fecha = new Date(indice.generadoEn);
+    const textoFecha = Number.isNaN(fecha.getTime()) ? "" : ` · ${fecha.toLocaleString("es-ES")}`;
+    nodo.replaceChildren(punto, `JSON publicado${textoFecha}`);
+    nodo.title = `${Object.keys(indice.competiciones || {}).length} competiciones · ${Object.keys(indice.equipos || {}).length} equipos`;
   },
 
   limpiar() {
