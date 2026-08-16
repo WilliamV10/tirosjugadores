@@ -43,6 +43,10 @@ const Datos = {
       tramos se piden de cuatro en cuatro meses y se para en cuanto hay
       partidos suficientes; y lo ya guardado no se vuelve a pedir. */
   async partidosDeEquipos(equipos, { minimo = 10, alAvanzar = null } = {}) {
+    const locales = await FuenteLocal.partidosDeEquipos(equipos);
+    if (locales && locales.every((filas) => filas.length > 0)) {
+      return { listas: locales, tramosUsados: 0, origen: "json" };
+    }
     if (!(await BD.lista())) return this._sinBase(equipos, { minimo, alAvanzar });
 
     const ligas = [...new Set(equipos.flatMap((equipo) => equipo.ligas))];
@@ -67,6 +71,8 @@ const Datos = {
   /** Historial directo eficiente: una peticion por temporada al calendario
       global de A, en lugar de descargar cada liga por ventanas de fechas. */
   async enfrentamientosHistoricos(equipoA, equipoB, { temporadas = 6 } = {}) {
+    const locales = await FuenteLocal.enfrentamientos(equipoA, equipoB);
+    if (locales !== null) return locales;
     const actual = new Date().getFullYear();
     const anios = Array.from({ length: temporadas }, (_, i) => actual - i);
     const calendarios = await Promise.all(

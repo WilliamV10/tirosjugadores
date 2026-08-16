@@ -164,6 +164,8 @@ const App = {
       // habitual del club (p. ej. Leagues Cup). La búsqueda aporta esa liga
       // principal y evita analizar únicamente el torneo del encuentro.
       const resolver = async (equipo) => {
+        const local = await FuenteLocal.candidatoPorId(equipo.id);
+        if (local) return local;
         const candidatos = await this.candidatosDe(equipo.displayName, "team");
         return candidatos.find((c) => Logica.idDesdeUid(c.uid, "t") === equipo.id)
           || candidatos[0]
@@ -216,7 +218,8 @@ const App = {
   async candidatosDe(nombre, tipo) {
     const esEquipo = tipo === "team";
     const consulta = esEquipo ? Logica.aliasDeBusqueda(nombre) : nombre;
-    const encontrados = await Api.buscar(consulta, tipo);
+    const locales = esEquipo ? await FuenteLocal.buscarEquipos(consulta) : null;
+    const encontrados = locales?.length ? locales : await Api.buscar(consulta, tipo);
     return Logica.priorizarCandidatos(encontrados, consulta, { filtrarCategorias: esEquipo });
   },
 
@@ -446,7 +449,7 @@ const App = {
   /** Deja claro lo que costó: peticiones reales y cuántas se ahorraron. */
   anunciarCoste(partidos, peticiones) {
     if (!peticiones) {
-      UI.mostrarEstado(`${partidos} partidos servidos desde la base local, sin pedir nada a ESPN.`);
+      UI.mostrarEstado(`${partidos} partidos servidos desde datos locales, sin pedir nada a ESPN.`);
     } else {
       UI.mostrarEstado(`${partidos} partidos con ${peticiones} ${peticiones === 1 ? "petición" : "peticiones"} a ESPN.`);
     }

@@ -121,7 +121,8 @@ js/logica.js        parseo, medias, comparación y lecturas — funciones puras,
 js/api.js           llamadas a ESPN + caché de sesión
 js/bd.js            base de datos local (IndexedDB): esquema, transacciones y consultas
 js/repositorio.js   guardar y consultar el modelo: partidos, equipos, jugadores, eventos
-js/datos.js         orquesta base + red: lee de local y pide a ESPN sólo lo que falta
+js/fuente-local.js  índice y fragmentos JSON publicados desde SQLite
+js/datos.js         orquesta JSON + IndexedDB + red y pide a ESPN sólo lo que falta
 js/ui.js            piezas de interfaz reutilizables (tarjetas, tablas, gráfico, tooltip)
 js/vistas.js        arma cada una de las cuatro pantallas con esas piezas
 js/app.js           controlador: estado, flujo y render
@@ -227,11 +228,36 @@ las tasas con un peso progresivo limitado al **15 %**, evitando que partidos ant
 dominen la forma reciente. También muestra cuotas justas, marcador más probable, tamaño de
 muestra y peso H2H. Los porcentajes suman 100 %, pero aún no están calibrados mediante
 backtesting y omiten alineaciones, bajas, árbitro, descanso y contexto competitivo.
-Además, la independencia Poisson puede desajustar la probabilidad de empates con pocos goles.
+Antes de comparar las rachas mide si comparten competición, rivales o enfrentamientos
+directos. Si las muestras están desconectadas, reduce la diferencia entre sus tasas hacia
+un escenario neutral, marca la confianza como baja y **no publica el 1X2 ni el marcador
+probable**; así una racha perfecta en una categoría distinta no se interpreta como fuerza absoluta. Además, la independencia
+Poisson puede desajustar la probabilidad de empates con pocos goles.
 
 > Estas cifras son resúmenes y estimaciones transparentes de la muestra, no xG ni
 > probabilidades calibradas. La cuota justa sirve para comparar una frecuencia con una
 > cuota ofrecida, pero todavía no sustituye un backtesting del modelo.
+
+## ETL SQLite y datos para GitHub Pages
+
+La web continúa funcionando sola con IndexedDB, pero `bd/` permite construir una base
+propia sin repetir el histórico en cada navegador:
+
+```powershell
+py bd\carga_inicial.py       # 52 competiciones, histórico reanudable
+py bd\carga_incremental.py   # refresca sólo la ventana reciente de cada competición
+py bd\exportar.py --limpiar  # genera datos/ por competición y temporada
+py bd\pruebas_etl.py         # validación local, sin red
+```
+
+La incremental comienza en el último partido guardado menos siete días para recoger
+correcciones y aplazados. Cada ventana y cada petición quedan auditadas en SQLite.
+
+La base `apuestas.db` se queda fuera de Git. Lo que se publica es `datos/`: un índice
+y un JSON por competición/temporada. La aplicación los usa primero para búsquedas,
+partidos de equipo, córners, comparaciones y H2H; si falta cobertura conserva
+IndexedDB y ESPN como respaldo. La agenda de hoy/mañana y los tiros de jugadores siguen
+consultando ESPN, pues requieren actualización inmediata o un ETL de detalle distinto.
 
 Al buscar un equipo se **prioriza la coincidencia exacta** y se ocultan los equipos
 femeninos y juveniles salvo que se pidan, así que «américa vs chivas» resuelve solo

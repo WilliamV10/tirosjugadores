@@ -1,2 +1,34 @@
 # Configuración local de Claude
 .claude/
+bd/*
+# Base SQLite generada por los ETL
+apuestas.db
+apuestas.db-shm
+apuestas.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Temporales del exportador; los JSON definitivos sí se publican
+datos/**/*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Entornos, cachés y configuración local
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+htmlcov/
