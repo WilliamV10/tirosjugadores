@@ -36,6 +36,7 @@
   --modo-corners:   #eb6834;
   --modo-comparar:  #7c5cd6;
   --modo-hoy:       #087f8c;
+  --modo-rankings:  #6d5bd0;
   --acento:         var(--modo-tiros);
   --acento-suave:   rgba(42, 120, 214, 0.10);
 
@@ -75,6 +76,7 @@
     --modo-corners:  #d95926;
     --modo-comparar: #9085e9;
     --modo-hoy:      #28b8c7;
+    --modo-rankings: #a78bfa;
     --acento-suave:  rgba(57, 135, 229, 0.16);
 
     --bueno:        #0ca30c;
@@ -91,6 +93,7 @@ body[data-modo="partidos"] { --acento: var(--modo-partidos); --acento-suave: col
 body[data-modo="corners"]  { --acento: var(--modo-corners);  --acento-suave: color-mix(in srgb, var(--modo-corners) 12%, transparent); }
 body[data-modo="comparar"] { --acento: var(--modo-comparar); --acento-suave: color-mix(in srgb, var(--modo-comparar) 14%, transparent); }
 body[data-modo="hoy"]      { --acento: var(--modo-hoy);      --acento-suave: color-mix(in srgb, var(--modo-hoy) 12%, transparent); }
+body[data-modo="rankings"] { --acento: var(--modo-rankings); --acento-suave: color-mix(in srgb, var(--modo-rankings) 12%, transparent); }
 
 /* Cada tarjeta de modo lleva su propio color aunque no esté activa */
 .modo[data-modo="tiros"]    { --color-modo: var(--modo-tiros); }
@@ -98,6 +101,7 @@ body[data-modo="hoy"]      { --acento: var(--modo-hoy);      --acento-suave: col
 .modo[data-modo="corners"]  { --color-modo: var(--modo-corners); }
 .modo[data-modo="comparar"] { --color-modo: var(--modo-comparar); }
 .modo[data-modo="hoy"]      { --color-modo: var(--modo-hoy); }
+.modo[data-modo="rankings"] { --color-modo: var(--modo-rankings); }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* el atributo gana a cualquier display de clase */
@@ -644,7 +648,7 @@ main { max-width: 1120px; padding-top: 0; }
 .visual-pie span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #34d399; margin-right: 7px; }
 .visual-pie b { color: #34d399; }
 
-.modos { grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.modos { grid-template-columns: repeat(6, 1fr); gap: 12px; }
 .modo { min-height: 154px; padding: 20px; border-radius: 18px; }
 .modo::after { content: "→"; position: absolute; right: 18px; top: 22px; color: var(--color-modo); opacity: .55; font-size: 18px; transition: transform .18s ease; }
 .modo:hover::after { transform: translateX(3px); opacity: 1; }
@@ -773,6 +777,20 @@ tbody tr { transition: background .12s ease; }
 .agenda-analizar:hover { border-color: var(--serie-azul); background: color-mix(in srgb, var(--serie-azul) 10%, var(--superficie)); }
 .agenda-analizar:active { transform: translateY(1px); }
 .agenda-analizar:focus-visible { outline: 2px solid var(--serie-azul); outline-offset: 2px; }
+.agenda-radar-boton { min-height: 44px; padding: 0 15px; border: 1px solid color-mix(in srgb, var(--acento) 50%, var(--borde)); border-radius: 11px; color: var(--acento); background: var(--acento-suave); font: 750 12px system-ui; cursor: pointer; }
+.agenda-radar-boton:disabled { opacity: .6; cursor: wait; }
+.radar-panel { border-top: 3px solid var(--acento); }
+.radar-lista { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.radar-oportunidad { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; padding: 13px; border: 1px solid var(--hairline); border-radius: 11px; background: var(--superficie-2); }
+.radar-oportunidad > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.radar-oportunidad > div:last-child { text-align: right; }
+.radar-oportunidad strong { color: var(--tinta); font-size: 12px; }
+.radar-oportunidad span { overflow: hidden; color: var(--tinta-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.comunes-resumen { display: flex; gap: 8px; margin-bottom: 12px; }
+.comunes-resumen span { padding: 7px 10px; border-radius: 8px; color: var(--tinta-2); background: var(--superficie-2); font-size: 11px; font-weight: 700; }
+.ranking-equipo { display: flex; align-items: center; gap: 9px; min-width: 180px; }
+.ranking-equipo .avatar { width: 28px; height: 28px; }
+.ranking-pos { color: var(--tinta-muted); font-weight: 800; }
 .analisis-dato, .proyeccion-dato {
   min-width: 0; padding: 13px; border: 1px solid var(--hairline);
   border-radius: 12px; background: var(--superficie-2);
@@ -901,6 +919,9 @@ tbody tr { transition: background .12s ease; }
   .agenda-liga-contenido { padding: 0 0 12px; }
   .agenda-partido { grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: 13px; }
   .agenda-disponible { display: none; }
+  .radar-lista { grid-template-columns: 1fr; }
+  .radar-oportunidad { grid-template-columns: 1fr; }
+  .radar-oportunidad > div:last-child { text-align: left; }
   .agenda-analizar { grid-column: 1 / -1; width: 100%; }
   .paginador { align-items: stretch; flex-direction: column; }
   .paginador-controles { justify-content: space-between; }

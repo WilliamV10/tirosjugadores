@@ -604,6 +604,118 @@ const Logica = {
     };
   },
 
+  /** Compara el partido mas reciente de cada equipo contra los mismos rivales. */
+  rivalesComunes(filasA, filasB, limite = 30) {
+    const ultimos = (filas) => {
+      const mapa = new Map();
+      for (const fila of filas.slice(0, limite)) {
+        const clave = String(fila.idRival || fila.rival || "");
+        if (clave && !mapa.has(clave)) mapa.set(clave, fila);
+      }
+      return mapa;
+    };
+    const a = ultimos(filasA);
+    const b = ultimos(filasB);
+    const puntos = (resultado) => resultado === "W" ? 3 : resultado === "D" ? 1 : 0;
+    const rivales = [...a.keys()].filter((clave) => b.has(clave)).map((clave) => {
+      const filaA = a.get(clave);
+      const filaB = b.get(clave);
+      return {
+        id: clave,
+        nombre: filaA.rival || filaB.rival,
+        a: filaA,
+        b: filaB,
+        puntosA: puntos(filaA.resultado),
+        puntosB: puntos(filaB.resultado),
+      };
+    }).sort((x, y) => Math.max(y.a.fecha, y.b.fecha) - Math.max(x.a.fecha, x.b.fecha));
+    return {
+      rivales,
+      puntosA: rivales.reduce((s, r) => s + r.puntosA, 0),
+      puntosB: rivales.reduce((s, r) => s + r.puntosB, 0),
+    };
+  },
+
+  /** Ranking de forma dentro de una competicion. Cada equipo aporta solamente
+      sus N partidos mas recientes para que calendarios desiguales sean comparables. */
+  rankingCompeticion(datos, limite = 10) {
+    if (!datos?.partidos) return [];
+    const porEquipo = new Map();
+    const agregar = (partido, propio, rival, enCasa) => {
+      if (partido.estado !== "jugado" || propio.goles === null || rival.goles === null) return;
+      const fila = {
+        fecha: new Date(partido.fecha), enCasa,
+        golesFavor: Number(propio.goles), golesContra: Number(rival.goles),
+        resultado: propio.goles > rival.goles ? "W" : propio.goles < rival.goles ? "L" : "D",
+        cornersFavor: propio.estadisticas?.corners ?? null,
+        cornersContra: rival.estadisticas?.corners ?? null,
+        tiros: propio.estadisticas?.tiros ?? null,
+        tirosPuerta: propio.estadisticas?.tirosPuerta ?? null,
+      };
+      const clave = String(propio.id);
+      if (!porEquipo.has(clave)) porEquipo.set(clave, { equipo: propio, filas: [] });
+      porEquipo.get(clave).filas.push(fila);
+    };
+    for (const partido of datos.partidos) {
+      agregar(partido, partido.local, partido.visitante, true);
+      agregar(partido, partido.visitante, partido.local, false);
+    }
+    const promedio = (filas, selector) => {
+      const valores = filas.map(selector).filter(Number.isFinite);
+      return valores.length ? valores.reduce((s, v) => s + v, 0) / valores.length : null;
+    };
+    return [...porEquipo.values()].map(({ equipo, filas }) => {
+      const muestra = filas.sort((a, b) => b.fecha - a.fecha).slice(0, limite);
+      const v = muestra.filter((f) => f.resultado === "W").length;
+      const e = muestra.filter((f) => f.resultado === "D").length;
+      const gf = muestra.reduce((s, f) => s + f.golesFavor, 0);
+      const gc = muestra.reduce((s, f) => s + f.golesContra, 0);
+      const conCorners = muestra.filter((f) => Number.isFinite(f.cornersFavor) && Number.isFinite(f.cornersContra));
+      return {
+        id: String(equipo.id), nombre: equipo.nombre, abreviatura: equipo.abreviatura, escudo: equipo.escudo,
+        pj: muestra.length, v, e, d: muestra.length - v - e, puntos: v * 3 + e,
+        ppp: muestra.length ? (v * 3 + e) / muestra.length : 0, gf, gc, dg: gf - gc,
+        corners: promedio(muestra, (f) => f.cornersFavor), tiros: promedio(muestra, (f) => f.tiros),
+        tirosPuerta: promedio(muestra, (f) => f.tirosPuerta),
+        over25: muestra.length ? muestra.filter((f) => f.golesFavor + f.golesContra > 2.5).length * 100 / muestra.length : 0,
+        over95Corners: conCorners.length ? conCorners.filter((f) => f.cornersFavor + f.cornersContra > 9.5).length * 100 / conCorners.length : null,
+      };
+    }).filter((fila) => fila.pj >= Math.min(3, limite))
+      .sort((a, b) => b.ppp - a.ppp || b.dg / b.pj - a.dg / a.pj || b.gf - a.gf)
+      .map((fila, indice) => ({ ...fila, posicion: indice + 1 }));
+  },
+
+  /** Resumen rapido para ordenar oportunidades de una jornada. */
+  radarPartido(filasA, filasB, muestra = 10) {
+    const a = filasA.slice(0, muestra);
+    const b = filasB.slice(0, muestra);
+    if (a.length < 3 || b.length < 3) return null;
+    const casa = a.filter((f) => f.enCasa).slice(0, muestra);
+    const visita = b.filter((f) => !f.enCasa).slice(0, muestra);
+    const proyeccion = this.proyectarPartido(a, b, {
+      lineaGoles: 2.5, lineaCorners: 9.5,
+      filasResultadoA: casa, filasResultadoB: visita,
+    });
+    const candidatos = [
+      { mercado: "Más de 2,5 goles", probabilidad: proyeccion.probGoles },
+      { mercado: "Más de 9,5 córners", probabilidad: proyeccion.probCorners },
+      { mercado: "Ambos marcan", probabilidad: proyeccion.probAmbos },
+    ].filter((x) => Number.isFinite(x.probabilidad));
+    const resultado = proyeccion.resultado;
+    if (resultado) {
+      const opciones = [
+        { mercado: "Victoria local", probabilidad: resultado.victoriaA },
+        { mercado: "Empate", probabilidad: resultado.empate },
+        { mercado: "Victoria visitante", probabilidad: resultado.victoriaB },
+      ];
+      candidatos.push(opciones.sort((x, y) => y.probabilidad - x.probabilidad)[0]);
+    }
+    const mejor = candidatos.sort((x, y) => y.probabilidad - x.probabilidad)[0] || null;
+    const cobertura = Math.min(1, Math.min(a.length, b.length) / muestra);
+    const confianza = cobertura >= 0.8 ? "alta" : cobertura >= 0.5 ? "media" : "baja";
+    return { ...proyeccion, mejor, confianza, muestraA: a.length, muestraB: b.length };
+  },
+
   /** Perfil completo de un equipo sobre los partidos dados. */
   perfil(filas) {
     const n = filas.length;

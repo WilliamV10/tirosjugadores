@@ -4,8 +4,13 @@
    Formato — fechas, numeros y etiquetas en es-ES
    ============================================================ */
 const Formato = {
-  numero: (valor, decimales = 2) =>
-    valor.toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: decimales }),
+  numero: (valor, decimales = 2) => {
+    const maximo = Math.max(0, Math.min(20, Number(decimales) || 0));
+    return valor.toLocaleString("es-ES", {
+      minimumFractionDigits: Math.min(1, maximo),
+      maximumFractionDigits: maximo,
+    });
+  },
 
   porcentaje: (valor) => `${Math.round(valor)}%`,
 

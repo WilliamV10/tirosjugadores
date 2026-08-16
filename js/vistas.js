@@ -363,7 +363,10 @@ const Vistas = {
   /* ============================================================
      Vista 4 — agenda diaria por competición
      ============================================================ */
-  hoy(ligas, alAnalizar, { dia = 0, alCambiarDia = () => {} } = {}) {
+  hoy(ligas, alAnalizar, {
+    dia = 0, alCambiarDia = () => {}, radar = {}, ligaSeleccionada = "todas",
+    alCambiarLiga = () => {}, alGenerarRadar = () => {},
+  } = {}) {
     const total = ligas.reduce((suma, liga) => suma + liga.partidos.length, 0);
     const pendientes = ligas.reduce((suma, liga) => suma + liga.partidos.filter((p) => p.estado === "pre").length, 0);
     const enVivoAhora = ligas.reduce((suma, liga) => suma + liga.partidos.filter((p) => p.estado === "in").length, 0);
@@ -374,6 +377,12 @@ const Vistas = {
       UI.el("option", { value: "todas" }, ["Todas las competiciones"]),
       ...ligas.map((liga) => UI.el("option", { value: liga.id }, [`${liga.nombre} (${liga.partidos.length})`])),
     ]);
+    selectorLiga.value = ligaSeleccionada;
+    const botonRadar = UI.el("button", { type: "button", class: "agenda-radar-boton" }, [
+      radar.cargando ? "Analizando…" : "Buscar oportunidades",
+    ]);
+    botonRadar.disabled = Boolean(radar.cargando);
+    botonRadar.addEventListener("click", () => alGenerarRadar(selectorLiga.value));
     const selectorMuestra = UI.el("select", { class: "agenda-filtro agenda-muestra", "aria-label": "Partidos usados al proyectar" }, [
       ...[5, 10, 15, 20].map((n) => UI.el("option", { value: n }, [`Muestra: últimos ${n}`])),
     ]);
@@ -395,7 +404,7 @@ const Vistas = {
           UI.el("h1", {}, [dia === 1 ? "Partidos de mañana" : "Partidos de hoy"]),
           UI.el("p", {}, [`${total} encuentros · ${ligas.length} competiciones · datos de ESPN`]),
         ]),
-        UI.el("div", { class: "agenda-controles" }, [selectorDia, selectorLiga, selectorMuestra]),
+        UI.el("div", { class: "agenda-controles" }, [selectorDia, selectorLiga, selectorMuestra, botonRadar]),
       ]),
       UI.el("div", { class: "agenda-resumen" }, [
         UI.el("div", {}, [UI.el("strong", {}, [String(total)]), UI.el("span", {}, ["partidos publicados"])]),
@@ -404,6 +413,16 @@ const Vistas = {
         UI.el("div", {}, [UI.el("strong", {}, [proximo ? Formato.hora(proximo.fecha) : "–"]), UI.el("span", {}, [proximo ? "próximo inicio" : `${pendientes} por comenzar`])]),
       ]),
     ]);
+
+    const oportunidades = Object.values(radar.resultados || {}).filter((r) => r?.mejor)
+      .sort((a, b) => (b.mejor?.probabilidad || 0) - (a.mejor?.probabilidad || 0));
+    const panelRadar = oportunidades.length ? UI.tarjeta("Radar de oportunidades", [
+      UI.el("p", { class: "nota" }, ["Ordenado por la frecuencia más alta de la muestra local. Es una señal estadística, no una garantía."]),
+      UI.el("div", { class: "radar-lista" }, oportunidades.slice(0, 8).map((r) => UI.el("div", { class: "radar-oportunidad" }, [
+        UI.el("div", {}, [UI.el("strong", {}, [r.partido]), UI.el("span", {}, [r.competicion])]),
+        UI.el("div", {}, [UI.el("strong", {}, [r.mejor?.mercado || "Sin mercado"]), UI.el("span", {}, [r.mejor ? `${Formato.numero(r.mejor.probabilidad, 0)}% · confianza ${r.confianza}` : "–"])]),
+      ]))),
+    ], { clase: "radar-panel" }) : null;
 
     const primeraAbierta = Math.max(0, ligas.findIndex((liga) => liga.partidos.some((p) => p.estado === "in")));
     const bloques = ligas.map((liga, indiceLiga) => {
@@ -418,16 +437,20 @@ const Vistas = {
         ]);
         const boton = UI.el("button", { type: "button", class: "agenda-analizar" }, ["Ver informe"]);
         boton.addEventListener("click", () => alAnalizar(partido, liga));
+        const datoRadar = radar.resultados?.[String(partido.eventId)];
+        const radarPartido = datoRadar ? [
+          UI.el("strong", {}, [datoRadar.mejor?.mercado || "Sin señal clara"]),
+          UI.el("span", {}, [datoRadar.mejor ? `${Formato.numero(datoRadar.mejor.probabilidad, 0)}% · ${datoRadar.confianza}` : "muestra insuficiente"]),
+        ] : radar.cargando ? [UI.el("strong", {}, ["Calculando…"]), UI.el("span", {}, ["datos JSON locales"])] : [
+          UI.el("strong", {}, ["Forma + H2H"]), UI.el("span", {}, ["informe bajo demanda"]),
+        ];
         return UI.el("div", { class: "agenda-partido" }, [
           UI.el("div", { class: `agenda-estado ${enVivo ? "en-vivo" : terminado ? "final" : ""}`.trim() }, [
             UI.el("strong", {}, [estado]),
             UI.el("small", {}, [enVivo ? (partido.detalleEstado || "actualizando") : terminado ? "FT" : "programado"]),
           ]),
           UI.el("div", { class: "agenda-equipos" }, [equipo(partido.local, enVivo || terminado), equipo(partido.visitante, enVivo || terminado)]),
-          UI.el("div", { class: "agenda-disponible" }, [
-            UI.el("strong", {}, ["Forma + H2H"]),
-            UI.el("span", {}, ["proyección bajo demanda"]),
-          ]),
+          UI.el("div", { class: "agenda-disponible" }, radarPartido),
           boton,
         ]);
       });
@@ -443,16 +466,19 @@ const Vistas = {
         UI.el("div", { class: "agenda-liga-contenido" }, [UI.el("div", { class: "agenda-lista" }, partidos)]),
       ]);
       bloque.dataset.liga = liga.id;
+      bloque.hidden = ligaSeleccionada !== "todas" && ligaSeleccionada !== liga.id;
+      if (ligaSeleccionada !== "todas" && ligaSeleccionada === liga.id) bloque.open = true;
       return bloque;
     });
     selectorLiga.addEventListener("change", () => {
+      alCambiarLiga(selectorLiga.value);
       for (const bloque of bloques) {
         const coincide = selectorLiga.value === "todas" || bloque.dataset.liga === selectorLiga.value;
         bloque.hidden = !coincide;
         if (selectorLiga.value !== "todas" && coincide) bloque.open = true;
       }
     });
-    this.pintar(cabecera, bloques.length ? bloques : UI.tarjeta("Sin encuentros publicados", [
+    this.pintar(cabecera, panelRadar || [], bloques.length ? bloques : UI.tarjeta("Sin encuentros publicados", [
       UI.el("p", { class: "nota" }, [dia === 1
         ? "ESPN todavía no ha publicado partidos para mañana. Puedes volver a Hoy desde el selector superior."
         : "ESPN no tiene encuentros publicados para hoy."]),
@@ -471,9 +497,66 @@ const Vistas = {
       this.duelo(ladoA, ladoB, ganadas("a"), ganadas("b")),
       this.enfrentadas(ladoA, ladoB, metricas),
       UI.tarjetaLecturas(Logica.lecturasComparacion(ladoA, ladoB, metricas, cruces)),
+      this.comunes(ladoA, ladoB),
       this.historial(ladoA, cruces, filtroSede),
       this.detallePorEquipo(ladoA, ladoB),
     );
+  },
+
+  comunes(ladoA, ladoB) {
+    const comunes = Logica.rivalesComunes(ladoA.filasTodas, ladoB.filasTodas);
+    if (!comunes.rivales.length) return UI.tarjeta("Rivales comunes", [
+      UI.el("p", { class: "nota" }, ["No hay rivales comunes en los 30 partidos recientes de ambos equipos."]),
+    ]);
+    const resultado = (fila) => `${Formato.resultado(fila.resultado).texto} ${fila.golesFavor}-${fila.golesContra}`;
+    const filas = comunes.rivales.map((r) => UI.el("tr", {}, [
+      UI.el("td", {}, [r.nombre]),
+      UI.el("td", { class: "num" }, [resultado(r.a)]),
+      UI.el("td", { class: "num" }, [resultado(r.b)]),
+    ]));
+    return UI.tarjeta(`Rivales comunes (${comunes.rivales.length})`, [
+      UI.el("div", { class: "comunes-resumen" }, [
+        UI.el("span", {}, [`${ladoA.equipo.displayName}: ${comunes.puntosA} pts`]),
+        UI.el("span", {}, [`${ladoB.equipo.displayName}: ${comunes.puntosB} pts`]),
+      ]),
+      UI.tabla(["Rival", { texto: ladoA.equipo.displayName, num: true }, { texto: ladoB.equipo.displayName, num: true }], filas),
+      UI.el("p", { class: "nota" }, ["Se usa el partido más reciente de cada equipo contra cada rival compartido."]),
+    ]);
+  },
+
+  rankings({ competiciones = [], slug = "", limite = 10, filas = [], cargando = false }, alCambiar) {
+    const selectorLiga = UI.el("select", { class: "agenda-filtro", "aria-label": "Competición del ranking" },
+      competiciones.map((c) => UI.el("option", { value: c.slug }, [c.nombre])));
+    selectorLiga.value = slug;
+    const selectorMuestra = UI.el("select", { class: "agenda-filtro", "aria-label": "Muestra del ranking" },
+      [5, 10, 15, 20].map((n) => UI.el("option", { value: n }, [`Últimos ${n}`])));
+    selectorMuestra.value = String(limite);
+    selectorLiga.addEventListener("change", () => alCambiar(selectorLiga.value, Number(selectorMuestra.value)));
+    selectorMuestra.addEventListener("change", () => alCambiar(selectorLiga.value, Number(selectorMuestra.value)));
+    const cabecera = UI.el("section", { class: "agenda-encabezado ranking-encabezado" }, [
+      UI.el("div", { class: "agenda-titulo-fila" }, [
+        UI.el("div", {}, [UI.el("h1", {}, ["Rankings por competición"]), UI.el("p", {}, ["Forma, producción ofensiva y mercados desde los JSON publicados."])]),
+        UI.el("div", { class: "agenda-controles" }, [selectorLiga, selectorMuestra]),
+      ]),
+    ]);
+    if (cargando) return this.pintar(cabecera, UI.el("div", { class: "esqueleto esqueleto-grafico" }));
+    const tabla = UI.tablaPaginada(
+      ["#", "Equipo", "PJ", "V-E-D", { texto: "Pts/PJ", num: true }, { texto: "GF-GC", num: true }, { texto: "Córners", num: true }, { texto: "Tiros", num: true }, { texto: "+2,5", num: true }, { texto: "+9,5 cór.", num: true }],
+      filas,
+      (r) => UI.el("tr", {}, [
+        UI.el("td", { class: "ranking-pos" }, [String(r.posicion)]),
+        UI.el("td", {}, [UI.el("div", { class: "ranking-equipo" }, [UI.avatar(r.escudo, r.nombre, { escudo: true }), UI.el("strong", {}, [r.nombre])])]),
+        UI.el("td", {}, [String(r.pj)]), UI.el("td", {}, [`${r.v}-${r.e}-${r.d}`]),
+        UI.el("td", { class: "num destacado" }, [Formato.numero(r.ppp, 2)]),
+        UI.el("td", { class: "num" }, [`${r.gf}-${r.gc}`]),
+        UI.el("td", { class: "num" }, [r.corners === null ? "–" : Formato.numero(r.corners, 1)]),
+        UI.el("td", { class: "num" }, [r.tiros === null ? "–" : Formato.numero(r.tiros, 1)]),
+        UI.el("td", { class: "num" }, [`${Formato.numero(r.over25, 0)}%`]),
+        UI.el("td", { class: "num" }, [r.over95Corners === null ? "–" : `${Formato.numero(r.over95Corners, 0)}%`]),
+      ]),
+      { porPagina: 15, etiqueta: "equipos" },
+    );
+    this.pintar(cabecera, UI.tarjeta("Ranking de forma reciente", [tabla, UI.el("p", { class: "nota" }, ["Ordenado por puntos por partido; desempata diferencia de gol. Las columnas de mercados describen la muestra elegida."])]));
   },
 
   /** Cabecera del duelo: escudo, nombre y forma de cada lado, con el

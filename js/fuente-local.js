@@ -87,6 +87,27 @@ const FuenteLocal = {
     return listas.every(Array.isArray) ? listas : null;
   },
 
+  async datosCompeticion(slug) {
+    const indice = await this.indice();
+    const entrada = indice?.competiciones?.[slug];
+    if (!entrada) return null;
+    const temporadas = entrada.temporadas || entrada.archivos || [];
+    const rutas = temporadas.map((item) => typeof item === "string" ? item : item.archivo).filter(Boolean);
+    const documentos = (await Promise.all(rutas.map((ruta) => this.archivo(ruta)))).filter(Boolean);
+    if (!documentos.length) return null;
+    const equipos = new Map();
+    const partidos = new Map();
+    for (const documento of documentos) {
+      for (const equipo of documento.equipos || []) equipos.set(String(equipo.id), equipo);
+      for (const partido of documento.partidos || []) partidos.set(String(partido.id), partido);
+    }
+    return {
+      competicion: documentos[0].competicion || { slug, nombre: entrada.nombre || slug },
+      equipos: [...equipos.values()],
+      partidos: [...partidos.values()],
+    };
+  },
+
   async enfrentamientos(equipoA, equipoB) {
     const filas = await this.partidosDeEquipo(equipoA.id);
     if (filas === null) return null;

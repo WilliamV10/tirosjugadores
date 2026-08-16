@@ -113,7 +113,8 @@ const UI = {
       boton.classList.toggle("activo", activo);
       boton.setAttribute("aria-pressed", String(activo));
     }
-    this.refs.formulario().hidden = modo === "hoy";
+    const vistaPropia = modo === "hoy" || modo === "rankings";
+    this.refs.formulario().hidden = vistaPropia;
     this.refs.selectorSede().hidden = ajustes.tipo === "player";
     const opcionPartido = this.refs.selectorSede().querySelector('option[value="partido"]');
     opcionPartido.hidden = modo !== "comparar";
@@ -123,7 +124,7 @@ const UI = {
     this.refs.botonProyeccion().hidden = modo !== "comparar";
     if (modo !== "comparar" && this.refs.modalProyeccion().open) this.refs.modalProyeccion().close();
     this.refs.entrada().placeholder = ajustes.placeholder;
-    if (modo !== "hoy") this.refs.entrada().focus();
+    if (!vistaPropia) this.refs.entrada().focus();
   },
 
   configurarLineas(modo) {

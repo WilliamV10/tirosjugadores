@@ -107,5 +107,10 @@ const CONFIG = {
       placeholder: "",
       ejemplos: [],
     },
+    rankings: {
+      tipo: "ranking",
+      placeholder: "",
+      ejemplos: [],
+    },
   },
 };

@@ -5,13 +5,16 @@
    ============================================================ */
 const App = {
   estado: {
-    modo: null,             // "tiros" | "partidos" | "corners" | "comparar" | "hoy"
+    modo: null,             // "tiros" | "partidos" | "corners" | "comparar" | "hoy" | "rankings"
     jugador: null,          // { candidato, id, filas }
     equipo: null,           // { equipo, id, filas }
     duelo: null,            // { a: lado, b: lado }
     agenda: null,           // ligas y partidos del día visible
     agendaDia: 0,           // 0 = hoy, 1 = mañana
     agendas: {},            // agendas normalizadas por fecha; evita repetir peticiones
+    agendaLiga: "todas",
+    radar: {},              // resultados por fecha, calculados desde JSON local
+    rankings: null,
     vistaProyeccion: "resultado",
   },
 
@@ -68,7 +71,49 @@ const App = {
     UI.mostrarEstado("");
     UI.limpiar();
     if (modo === "hoy") this.cargarPartidosHoy();
+    else if (modo === "rankings") this.cargarRankings();
     else this.render(); // si ya hay datos en cache para este modo, se pintan directamente
+  },
+
+  async cargarRankings(slug = null, limite = 10) {
+    const indice = await FuenteLocal.indice();
+    if (!indice) {
+      UI.mostrarEstado("No se encontró el índice JSON publicado.", { error: true });
+      return;
+    }
+    const competiciones = Object.entries(indice.competiciones || {})
+      .map(([clave, dato]) => ({ slug: clave, nombre: dato.nombre || clave }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    const elegido = slug || this.estado.rankings?.slug || (competiciones.some((c) => c.slug === "mex.1") ? "mex.1" : competiciones[0]?.slug);
+    this.estado.rankings = { competiciones, slug: elegido, limite, filas: [], cargando: true };
+    this.render();
+    const datos = await FuenteLocal.datosCompeticion(elegido);
+    this.estado.rankings = {
+      competiciones, slug: elegido, limite,
+      filas: Logica.rankingCompeticion(datos, limite), cargando: false,
+    };
+    this.render();
+  },
+
+  async generarRadar(ligaId = "todas") {
+    const fecha = this.fechaLocalYmd(this.estado.agendaDia);
+    const ligas = (this.estado.agenda || []).filter((liga) => ligaId === "todas" || liga.id === ligaId);
+    this.estado.radar[fecha] = { cargando: true, resultados: this.estado.radar[fecha]?.resultados || {} };
+    this.render();
+    const muestra = Number(UI.refs.selector().value) || 10;
+    const resultados = { ...this.estado.radar[fecha].resultados };
+    await Promise.all(ligas.flatMap((liga) => liga.partidos.map(async (partido) => {
+      const [filasA, filasB] = await Promise.all([
+        FuenteLocal.partidosDeEquipo(partido.local.id),
+        FuenteLocal.partidosDeEquipo(partido.visitante.id),
+      ]);
+      const calculo = Array.isArray(filasA) && Array.isArray(filasB) ? Logica.radarPartido(filasA, filasB, muestra) : null;
+      resultados[String(partido.eventId)] = calculo ? {
+        ...calculo, partido: `${partido.local.displayName} vs ${partido.visitante.displayName}`, competicion: liga.nombre,
+      } : { mejor: null, confianza: "sin muestra", partido: `${partido.local.displayName} vs ${partido.visitante.displayName}`, competicion: liga.nombre };
+    })));
+    this.estado.radar[fecha] = { cargando: false, resultados };
+    this.render();
   },
 
   fechaLocalYmd(desplazamiento = 0) {
@@ -516,11 +561,21 @@ const App = {
       );
       if (UI.refs.modalProyeccion().open) this.renderProyeccion();
     } else if (modo === "hoy" && this.estado.agenda) {
+      const fecha = this.fechaLocalYmd(this.estado.agendaDia);
       Vistas.hoy(
         this.estado.agenda,
         (partido, liga) => this.analizarPartidoHoy(partido, liga),
-        { dia: this.estado.agendaDia, alCambiarDia: (dia) => this.cargarAgenda(dia) },
+        {
+          dia: this.estado.agendaDia,
+          alCambiarDia: (dia) => this.cargarAgenda(dia),
+          ligaSeleccionada: this.estado.agendaLiga,
+          alCambiarLiga: (liga) => { this.estado.agendaLiga = liga; },
+          radar: this.estado.radar[fecha] || {},
+          alGenerarRadar: (liga) => this.generarRadar(liga),
+        },
       );
+    } else if (modo === "rankings" && this.estado.rankings) {
+      Vistas.rankings(this.estado.rankings, (slug, limite) => this.cargarRankings(slug, limite));
     }
   },
 };

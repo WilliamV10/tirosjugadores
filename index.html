@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Apuestas — análisis de jugadores y equipos</title>
-<link rel="stylesheet" href="styles.css?v=20260816-3">
+<link rel="stylesheet" href="styles.css?v=20260816-5">
 <!-- Scripts clásicos en orden de dependencia: así la página funciona también
      abriéndola con doble clic (los módulos ES los bloquea el navegador en file://) -->
-<script src="js/config.js?v=20260816-3" defer></script>
-<script src="js/formato.js?v=20260816-3" defer></script>
-<script src="js/logica.js?v=20260816-3" defer></script>
-<script src="js/api.js?v=20260816-3" defer></script>
-<script src="js/fuente-local.js?v=20260816-3" defer></script>
-<script src="js/datos.js?v=20260816-3" defer></script>
-<script src="js/ui.js?v=20260816-3" defer></script>
-<script src="js/vistas.js?v=20260816-3" defer></script>
-<script src="js/app.js?v=20260816-3" defer></script>
+<script src="js/config.js?v=20260816-5" defer></script>
+<script src="js/formato.js?v=20260816-5" defer></script>
+<script src="js/logica.js?v=20260816-5" defer></script>
+<script src="js/api.js?v=20260816-5" defer></script>
+<script src="js/fuente-local.js?v=20260816-5" defer></script>
+<script src="js/datos.js?v=20260816-5" defer></script>
+<script src="js/ui.js?v=20260816-5" defer></script>
+<script src="js/vistas.js?v=20260816-5" defer></script>
+<script src="js/app.js?v=20260816-5" defer></script>
 </head>
 <body>
 <main>
@@ -120,6 +120,14 @@
           <span class="modo-titulo">Partidos</span>
           <span class="modo-desc">Agenda de hoy y mañana lista para analizar.</span>
       </span>
+    </button>
+    <button type="button" class="modo" data-modo="rankings">
+      <span class="modo-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 20V10h4v10M10 20V4h4v16M15 20v-7h4v7M3 20h18"></path>
+        </svg>
+      </span>
+      <span class="modo-texto"><span class="modo-titulo">Rankings</span><span class="modo-desc">Forma y mercados por competición.</span></span>
     </button>
   </nav>
 
