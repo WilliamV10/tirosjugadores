@@ -537,12 +537,6 @@ td.num .cero { color: var(--tinta-muted); }
   color: var(--tinta-muted); font-size: 12px; margin-top: 30px;
   text-align: center; line-height: 1.6;
 }
-/* Qué guarda la base local, como una línea aparte sobre la fuente */
-.estado-base {
-  display: block; margin-bottom: 4px; color: var(--tinta-2);
-}
-.estado-base:empty { display: none; }
-
 /* ============================================================
    Movil
    ============================================================ */

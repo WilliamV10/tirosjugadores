@@ -53,23 +53,6 @@ const App = {
     UI.refs.modalProyeccion().addEventListener("click", (evento) => {
       if (evento.target === UI.refs.modalProyeccion()) UI.refs.modalProyeccion().close();
     });
-    this.revisarBase();
-  },
-
-  /** Estado de la base local: si está disponible y qué guarda. */
-  async revisarBase() {
-    if (!(await BD.lista())) {
-      UI.mostrarBase({ activa: false });
-      return;
-    }
-    BD.pedirPersistencia(); // que el navegador no borre los datos sin avisar
-    const { inventario, espacio } = await Repositorio.resumenAlmacen();
-    UI.mostrarBase({
-      activa: true,
-      partidos: inventario.partidos,
-      equipos: inventario.equipos,
-      usados: espacio.usados,
-    });
   },
 
   seleccionarModo(modo) {
@@ -453,7 +436,6 @@ const App = {
     } else {
       UI.mostrarEstado(`${partidos} partidos con ${peticiones} ${peticiones === 1 ? "petición" : "peticiones"} a ESPN.`);
     }
-    this.revisarBase(); // el pie refleja lo que acaba de entrar en la base
   },
 
   /* ---------- Render ---------- */

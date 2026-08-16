@@ -119,10 +119,8 @@ js/config.js        URLs, competiciones, alias de países y ajustes de cada modo
 js/formato.js       fechas, números y etiquetas en es-ES
 js/logica.js        parseo, medias, comparación y lecturas — funciones puras, sin DOM ni red
 js/api.js           llamadas a ESPN + caché de sesión
-js/bd.js            base de datos local (IndexedDB): esquema, transacciones y consultas
-js/repositorio.js   guardar y consultar el modelo: partidos, equipos, jugadores, eventos
 js/fuente-local.js  índice y fragmentos JSON publicados desde SQLite
-js/datos.js         orquesta JSON + IndexedDB + red y pide a ESPN sólo lo que falta
+js/datos.js         orquesta JSON + red y usa ESPN sólo como respaldo/fuente viva
 js/ui.js            piezas de interfaz reutilizables (tarjetas, tablas, gráfico, tooltip)
 js/vistas.js        arma cada una de las cuatro pantallas con esas piezas
 js/app.js           controlador: estado, flujo y render
@@ -240,8 +238,7 @@ Poisson puede desajustar la probabilidad de empates con pocos goles.
 
 ## ETL SQLite y datos para GitHub Pages
 
-La web continúa funcionando sola con IndexedDB, pero `bd/` permite construir una base
-propia sin repetir el histórico en cada navegador:
+`bd/` construye la base SQLite privada que alimenta los JSON publicados:
 
 ```powershell
 py bd\carga_inicial.py       # 52 competiciones, histórico reanudable
@@ -255,15 +252,20 @@ correcciones y aplazados. Cada ventana y cada petición quedan auditadas en SQLi
 
 La base `apuestas.db` se queda fuera de Git. Lo que se publica es `datos/`: un índice
 y un JSON por competición/temporada. La aplicación los usa primero para búsquedas,
-partidos de equipo, córners, comparaciones y H2H; si falta cobertura conserva
-IndexedDB y ESPN como respaldo. La agenda de hoy/mañana y los tiros de jugadores siguen
+partidos de equipo, córners, comparaciones y H2H; si falta cobertura conserva ESPN
+como respaldo en memoria. La agenda de hoy/mañana y los tiros de jugadores siguen
 consultando ESPN, pues requieren actualización inmediata o un ETL de detalle distinto.
 
 Al buscar un equipo se **prioriza la coincidencia exacta** y se ocultan los equipos
 femeninos y juveniles salvo que se pidan, así que «américa vs chivas» resuelve solo
 (América y Guadalajara) sin listas intermedias.
 
-## Base de datos local (IndexedDB)
+## IndexedDB (retirada)
+
+La versión actual ya no crea una base dentro del navegador. `js/bd.js` y
+`js/repositorio.js` fueron eliminados: los equipos salen de `datos/` y las consultas
+vivas van a ESPN sin persistencia. La descripción siguiente se conserva únicamente
+como registro histórico de la arquitectura anterior.
 
 La aplicación **descarga de ESPN una sola vez y luego consulta su propia base**, que
 vive en el navegador. Un partido ya jugado no cambia nunca, así que guardarlo es
@@ -313,8 +315,7 @@ de una competición, porcentaje de partidos que superan una línea, histórico l
 equipo, o los remates de cada jugador en un partido concreto. En la prueba con datos
 reales: 164 partidos de dos ligas guardados en **118 ms**, ocupando **448 KB**.
 
-Si el navegador bloquea IndexedDB (modo privado, alguna configuración de Safari), la
-aplicación lo detecta, lo dice en el pie y sigue funcionando contra la red como antes.
+Ese comportamiento pertenecía a la versión anterior y ya no aplica.
 
 ### Cómo se ahorran peticiones
 
