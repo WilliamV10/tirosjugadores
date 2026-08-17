@@ -127,6 +127,47 @@ const Vistas = {
     ], { clase: "analisis-panel" });
   },
 
+  avanzadoJugador(partidos) {
+    const lineas = [0.5, 1.5, 2.5, 3.5];
+    const matriz = Logica.matrizLineas(partidos.slice(0, 10), "tiros", lineas);
+    const filasMatriz = matriz.map(({ fila, cumple }) => UI.el("tr", {}, [
+      UI.el("td", { class: "tenue" }, [Formato.fechaCorta(fila.fecha)]), UI.el("td", {}, [fila.rival]),
+      ...cumple.map((ok) => UI.el("td", { class: `num matriz-${ok ? "si" : "no"}` }, [ok ? "✓" : "–"])),
+    ]));
+    const ventanas = Logica.ventanasSerie(partidos, (p) => p.tiros, 1.5);
+    const precision = (filas) => {
+      const tiros = filas.reduce((s, p) => s + p.tiros, 0);
+      const puerta = filas.reduce((s, p) => s + p.tirosPuerta, 0);
+      return tiros ? puerta * 100 / tiros : 0;
+    };
+    const intervaloTiros = Logica.intervaloHabitual(partidos, (p) => p.tiros);
+    const intervaloPuerta = Logica.intervaloHabitual(partidos, (p) => p.tirosPuerta);
+    const movil = Logica.mediaMovil(partidos, (p) => p.tiros, 5).slice(-10);
+    const graficaMovil = UI.el("div", { class: "mini-serie" }, movil.map((p) => UI.el("div", { class: "mini-serie-item" }, [
+      UI.el("span", { class: "mini-serie-barra", style: `height:${Math.min(100, p.valor * 15)}%`, title: Formato.numero(p.valor) }),
+      UI.el("small", {}, [Formato.fechaCorta(p.fecha)]),
+    ])));
+    const racha = UI.el("div", { class: "racha-visual", "aria-label": "Últimos partidos sobre la línea de 2+ tiros" },
+      partidos.slice(0, 15).reverse().map((p) => UI.el("span", {
+        class: p.tiros > 1.5 ? "cumple" : "falla", title: `${p.rival}: ${p.tiros} tiros`,
+      }, [String(p.tiros)])));
+    return UI.el("details", { class: "tarjeta analisis-desplegable" }, [
+      UI.el("summary", {}, [UI.el("strong", {}, ["Análisis avanzado de tiros"]), UI.el("span", {}, ["líneas, estabilidad y evolución"])]),
+      UI.el("div", { class: "analisis-avanzado-contenido" }, [
+        UI.el("section", {}, [UI.el("h3", {}, ["Consistencia por línea"]), UI.tabla(["Fecha", "Rival", "1+", "2+", "3+", "4+"], filasMatriz)]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Estabilidad al ampliar la muestra"]), UI.el("div", { class: "ventanas-grid" }, ventanas.map((v) => UI.el("div", {}, [
+          UI.el("strong", {}, [`${Formato.porcentaje(v.analisis.cumplimiento.porcentaje)}`]), UI.el("span", {}, [`últimos ${v.ventana}`]),
+        ])))]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Rango habitual y precisión"]), UI.el("div", { class: "ventanas-grid" }, [
+          ["Tiros", intervaloTiros], ["A puerta", intervaloPuerta],
+        ].map(([nombre, x]) => UI.el("div", {}, [UI.el("strong", {}, [x ? `${Formato.numero(x.inferior, 1)}–${Formato.numero(x.superior, 1)}` : "–"]), UI.el("span", {}, [`${nombre} · volatilidad ${x?.volatilidad || "–"}`])]))),
+          UI.el("p", { class: "nota" }, [`Precisión últimos 5: ${Formato.porcentaje(precision(partidos.slice(0, 5)))} · últimos ${partidos.length}: ${Formato.porcentaje(precision(partidos))}.`])]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Racha sobre 2+ tiros"]), racha]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Promedio móvil de 5 partidos"]), graficaMovil]),
+      ]),
+    ]);
+  },
+
   /* ============================================================
      Vista 1 — tiros por jugador
      ============================================================ */
@@ -210,6 +251,7 @@ const Vistas = {
       this.panelPerfilTiros(perfilTiros, partidos.length, etiqueta),
       UI.tarjetaLecturas(Logica.lecturasJugador(partidos, resumen)),
       grafico,
+      this.avanzadoJugador(partidos),
       tabla,
     );
   },
@@ -416,12 +458,27 @@ const Vistas = {
 
     const oportunidades = Object.values(radar.resultados || {}).filter((r) => r?.mejor)
       .sort((a, b) => (b.mejor?.probabilidad || 0) - (a.mejor?.probabilidad || 0));
+    const detalleOportunidad = (r) => {
+      const detalle = r.detalle;
+      const distribucion = r.distribucionGoles;
+      return UI.el("details", { class: "radar-oportunidad" }, [
+        UI.el("summary", {}, [
+          UI.el("div", {}, [UI.el("strong", {}, [r.partido]), UI.el("span", {}, [r.competicion])]),
+          UI.el("div", {}, [UI.el("strong", {}, [r.mejor?.mercado || "Sin mercado"]), UI.el("span", {}, [`${Formato.numero(r.mejor?.probabilidad || 0, 0)}% · calidad ${Formato.numero(detalle?.calidad || 0, 0)}`])]),
+        ]),
+        UI.el("div", { class: "radar-detalle-contenido" }, [
+          UI.el("div", { class: "ventanas-grid" }, [
+            ["Confianza", r.confianza], ["Consenso", detalle?.consenso || "–"], ["Estabilidad", `${Formato.numero(detalle?.estabilidad || 0, 0)}%`], ["Rango de goles", distribucion?.rango || "–"],
+          ].map(([k, v]) => UI.el("div", {}, [UI.el("strong", {}, [String(v)]), UI.el("span", {}, [k])]))),
+          ...(detalle?.contradiccion ? [UI.el("p", { class: "advertencia-modelo" }, ["Señal contradictoria: los dos equipos apoyan este mercado con frecuencias muy diferentes."])] : []),
+          UI.el("div", { class: "radar-ventanas" }, (detalle?.ventanas || []).map((v) => UI.el("span", {}, [`${v.n}: ${Formato.numero(v.combinado ?? 0, 0)}% (${Formato.numero(v.a ?? 0, 0)}/${Formato.numero(v.b ?? 0, 0)})`]))),
+          ...(distribucion ? [UI.el("div", { class: "distribucion-marcadores" }, distribucion.marcadores.map((m) => UI.el("span", {}, [`${m.marcador} · ${Formato.numero(m.probabilidad, 1)}%`])))] : []),
+        ]),
+      ]);
+    };
     const panelRadar = oportunidades.length ? UI.tarjeta("Radar de oportunidades", [
       UI.el("p", { class: "nota" }, ["Ordenado por la frecuencia más alta de la muestra local. Es una señal estadística, no una garantía."]),
-      UI.el("div", { class: "radar-lista" }, oportunidades.slice(0, 8).map((r) => UI.el("div", { class: "radar-oportunidad" }, [
-        UI.el("div", {}, [UI.el("strong", {}, [r.partido]), UI.el("span", {}, [r.competicion])]),
-        UI.el("div", {}, [UI.el("strong", {}, [r.mejor?.mercado || "Sin mercado"]), UI.el("span", {}, [r.mejor ? `${Formato.numero(r.mejor.probabilidad, 0)}% · confianza ${r.confianza}` : "–"])]),
-      ]))),
+      UI.el("div", { class: "radar-lista" }, oportunidades.slice(0, 8).map(detalleOportunidad)),
     ], { clase: "radar-panel" }) : null;
 
     const primeraAbierta = Math.max(0, ligas.findIndex((liga) => liga.partidos.some((p) => p.estado === "in")));
@@ -498,6 +555,7 @@ const Vistas = {
       this.enfrentadas(ladoA, ladoB, metricas),
       UI.tarjetaLecturas(Logica.lecturasComparacion(ladoA, ladoB, metricas, cruces)),
       this.comunes(ladoA, ladoB),
+      this.contextoComparacion(ladoA, ladoB),
       this.historial(ladoA, cruces, filtroSede),
       this.detallePorEquipo(ladoA, ladoB),
     );
@@ -513,35 +571,86 @@ const Vistas = {
       UI.el("td", {}, [r.nombre]),
       UI.el("td", { class: "num" }, [resultado(r.a)]),
       UI.el("td", { class: "num" }, [resultado(r.b)]),
+      UI.el("td", { class: "num" }, [Number.isFinite(r.a.tiros) ? String(r.a.tiros) : "–"]),
+      UI.el("td", { class: "num" }, [Number.isFinite(r.b.tiros) ? String(r.b.tiros) : "–"]),
     ]));
     return UI.tarjeta(`Rivales comunes (${comunes.rivales.length})`, [
       UI.el("div", { class: "comunes-resumen" }, [
         UI.el("span", {}, [`${ladoA.equipo.displayName}: ${comunes.puntosA} pts`]),
         UI.el("span", {}, [`${ladoB.equipo.displayName}: ${comunes.puntosB} pts`]),
       ]),
-      UI.tabla(["Rival", { texto: ladoA.equipo.displayName, num: true }, { texto: ladoB.equipo.displayName, num: true }], filas),
+      UI.tabla(["Rival", { texto: `Res. ${ladoA.equipo.displayName}`, num: true }, { texto: `Res. ${ladoB.equipo.displayName}`, num: true }, { texto: `Tiros ${ladoA.equipo.displayName}`, num: true }, { texto: `Tiros ${ladoB.equipo.displayName}`, num: true }], filas),
       UI.el("p", { class: "nota" }, ["Se usa el partido más reciente de cada equipo contra cada rival compartido."]),
     ]);
   },
 
-  rankings({ competiciones = [], slug = "", limite = 10, filas = [], cargando = false }, alCambiar) {
+  contextoComparacion(ladoA, ladoB) {
+    const perfilSede = (lado, casa) => Logica.perfil(lado.filasTodas.filter((f) => f.enCasa === casa).slice(0, 10));
+    const casaA = perfilSede(ladoA, true);
+    const fueraA = perfilSede(ladoA, false);
+    const casaB = perfilSede(ladoB, true);
+    const fueraB = perfilSede(ladoB, false);
+    const diferencial = (p, favor, contra) => Number.isFinite(p[favor]) && Number.isFinite(p[contra]) ? p[favor] - p[contra] : null;
+    const cruce = (etiqueta, ataqueA, defensaB, ataqueB, defensaA) => UI.el("div", { class: "cruce-contexto" }, [
+      UI.el("span", {}, [etiqueta]),
+      UI.el("strong", {}, [`${Formato.numero(ataqueA ?? 0, 1)} + ${Formato.numero(defensaB ?? 0, 1)} → ${Formato.numero(((ataqueA ?? 0) + (defensaB ?? 0)) / 2, 1)}`]),
+      UI.el("strong", {}, [`${Formato.numero(ataqueB ?? 0, 1)} + ${Formato.numero(defensaA ?? 0, 1)} → ${Formato.numero(((ataqueB ?? 0) + (defensaA ?? 0)) / 2, 1)}`]),
+    ]);
+    const sedeFila = (nombre, local, visita) => UI.el("tr", {}, [
+      UI.el("td", {}, [nombre]),
+      UI.el("td", { class: "num" }, [Formato.numero(local.puntosPorPartido, 2)]),
+      UI.el("td", { class: "num" }, [Formato.numero(visita.puntosPorPartido, 2)]),
+      UI.el("td", { class: "num" }, [Formato.numero(local.golesFavor ?? 0, 1)]),
+      UI.el("td", { class: "num" }, [Formato.numero(visita.golesFavor ?? 0, 1)]),
+    ]);
+    const movilA = Logica.mediaMovil(ladoA.filas, (p) => p.golesFavor, 5).slice(-5);
+    const movilB = Logica.mediaMovil(ladoB.filas, (p) => p.golesFavor, 5).slice(-5);
+    return UI.el("details", { class: "tarjeta analisis-desplegable" }, [
+      UI.el("summary", {}, [UI.el("strong", {}, ["Contexto y evolución"]), UI.el("span", {}, ["ataque/defensa, diferenciales y sede"])]),
+      UI.el("div", { class: "analisis-avanzado-contenido" }, [
+        UI.el("section", {}, [UI.el("h3", {}, ["Ataque frente a defensa rival"]), UI.el("div", { class: "cruces-grid" }, [
+          cruce("Goles", ladoA.perfil.golesFavor, ladoB.perfil.golesContra, ladoB.perfil.golesFavor, ladoA.perfil.golesContra),
+          cruce("Córners", ladoA.perfil.cornersFavor, ladoB.perfil.cornersContra, ladoB.perfil.cornersFavor, ladoA.perfil.cornersContra),
+          cruce("Tiros", ladoA.perfil.tiros, ladoB.perfil.tirosContra, ladoB.perfil.tiros, ladoA.perfil.tirosContra),
+        ])]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Diferenciales de producción"]), UI.el("div", { class: "ventanas-grid" }, [ladoA, ladoB].map((lado) => UI.el("div", {}, [
+          UI.el("strong", {}, [lado.equipo.displayName]),
+          UI.el("span", {}, [`Goles ${Formato.numero(diferencial(lado.perfil, "golesFavor", "golesContra") ?? 0, 1)} · Córners ${Formato.numero(diferencial(lado.perfil, "cornersFavor", "cornersContra") ?? 0, 1)} · Tiros ${Formato.numero(diferencial(lado.perfil, "tiros", "tirosContra") ?? 0, 1)}`]),
+        ])))]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Local frente a visitante"]), UI.tabla(["Equipo", "Pts local", "Pts visita", "GF local", "GF visita"], [
+          sedeFila(ladoA.equipo.displayName, casaA, fueraA), sedeFila(ladoB.equipo.displayName, casaB, fueraB),
+        ])]),
+        UI.el("section", {}, [UI.el("h3", {}, ["Evolución del promedio móvil de goles"]), UI.el("p", { class: "nota" }, [
+          `${ladoA.equipo.displayName}: ${movilA.map((x) => Formato.numero(x.valor, 1)).join(" → ")} · ${ladoB.equipo.displayName}: ${movilB.map((x) => Formato.numero(x.valor, 1)).join(" → ")}`,
+        ])]),
+      ]),
+    ]);
+  },
+
+  rankings({ competiciones = [], slug = "", limite = 10, categoria = "forma", filas = [], cargando = false }, alCambiar) {
     const selectorLiga = UI.el("select", { class: "agenda-filtro", "aria-label": "Competición del ranking" },
       competiciones.map((c) => UI.el("option", { value: c.slug }, [c.nombre])));
     selectorLiga.value = slug;
     const selectorMuestra = UI.el("select", { class: "agenda-filtro", "aria-label": "Muestra del ranking" },
       [5, 10, 15, 20].map((n) => UI.el("option", { value: n }, [`Últimos ${n}`])));
     selectorMuestra.value = String(limite);
-    selectorLiga.addEventListener("change", () => alCambiar(selectorLiga.value, Number(selectorMuestra.value)));
-    selectorMuestra.addEventListener("change", () => alCambiar(selectorLiga.value, Number(selectorMuestra.value)));
+    const selectorCategoria = UI.el("select", { class: "agenda-filtro", "aria-label": "Categoría del ranking" }, [
+      ["forma", "Forma"], ["ataque", "Ataque"], ["defensa", "Defensa"], ["tiros", "Tiros"], ["corners", "Córners"], ["consistencia", "Consistencia"],
+    ].map(([valor, texto]) => UI.el("option", { value: valor }, [texto])));
+    selectorCategoria.value = categoria;
+    const cambiar = () => alCambiar(selectorLiga.value, Number(selectorMuestra.value), selectorCategoria.value);
+    selectorLiga.addEventListener("change", cambiar);
+    selectorMuestra.addEventListener("change", cambiar);
+    selectorCategoria.addEventListener("change", cambiar);
     const cabecera = UI.el("section", { class: "agenda-encabezado ranking-encabezado" }, [
       UI.el("div", { class: "agenda-titulo-fila" }, [
         UI.el("div", {}, [UI.el("h1", {}, ["Rankings por competición"]), UI.el("p", {}, ["Forma, producción ofensiva y mercados desde los JSON publicados."])]),
-        UI.el("div", { class: "agenda-controles" }, [selectorLiga, selectorMuestra]),
+        UI.el("div", { class: "agenda-controles" }, [selectorLiga, selectorMuestra, selectorCategoria]),
       ]),
     ]);
     if (cargando) return this.pintar(cabecera, UI.el("div", { class: "esqueleto esqueleto-grafico" }));
     const tabla = UI.tablaPaginada(
-      ["#", "Equipo", "PJ", "V-E-D", { texto: "Pts/PJ", num: true }, { texto: "GF-GC", num: true }, { texto: "Córners", num: true }, { texto: "Tiros", num: true }, { texto: "+2,5", num: true }, { texto: "+9,5 cór.", num: true }],
+      ["#", "Equipo", "PJ", "V-E-D", { texto: "Pts/PJ", num: true }, { texto: "GF-GC", num: true }, { texto: "Córners", num: true }, { texto: "Tiros", num: true }, { texto: "A puerta", num: true }, { texto: "Cons.", num: true }, { texto: "+2,5", num: true }, { texto: "+9,5 cór.", num: true }],
       filas,
       (r) => UI.el("tr", {}, [
         UI.el("td", { class: "ranking-pos" }, [String(r.posicion)]),
@@ -551,12 +660,26 @@ const Vistas = {
         UI.el("td", { class: "num" }, [`${r.gf}-${r.gc}`]),
         UI.el("td", { class: "num" }, [r.corners === null ? "–" : Formato.numero(r.corners, 1)]),
         UI.el("td", { class: "num" }, [r.tiros === null ? "–" : Formato.numero(r.tiros, 1)]),
+        UI.el("td", { class: "num destacado" }, [r.tirosPuerta === null ? "–" : Formato.numero(r.tirosPuerta, 1)]),
+        UI.el("td", { class: "num" }, [`${Formato.numero(r.consistencia, 0)}%`]),
         UI.el("td", { class: "num" }, [`${Formato.numero(r.over25, 0)}%`]),
         UI.el("td", { class: "num" }, [r.over95Corners === null ? "–" : `${Formato.numero(r.over95Corners, 0)}%`]),
       ]),
       { porPagina: 15, etiqueta: "equipos" },
     );
-    this.pintar(cabecera, UI.tarjeta("Ranking de forma reciente", [tabla, UI.el("p", { class: "nota" }, ["Ordenado por puntos por partido; desempata diferencia de gol. Las columnas de mercados describen la muestra elegida."])]));
+    const valorCategoria = (r) => ({
+      forma: r.ppp, ataque: r.gf / r.pj, defensa: r.gc / r.pj,
+      tiros: r.tiros ?? 0, corners: r.corners ?? 0, consistencia: r.consistencia,
+    })[categoria] ?? r.ppp;
+    const extremos = [...filas.slice(0, 5), ...filas.slice(-5).reverse()];
+    const maximo = Math.max(1, ...extremos.map(valorCategoria));
+    const lideres = UI.el("details", { class: "tarjeta analisis-desplegable" }, [
+      UI.el("summary", {}, [UI.el("strong", {}, ["Líderes y rezagados"]), UI.el("span", {}, [`categoría: ${selectorCategoria.options[selectorCategoria.selectedIndex]?.text || categoria}`])]),
+      UI.el("div", { class: "ranking-barras" }, extremos.map((r, indice) => UI.el("div", { class: indice < 5 ? "lider" : "rezagado" }, [
+        UI.el("span", {}, [r.nombre]), UI.el("i", { style: `width:${valorCategoria(r) / maximo * 100}%` }), UI.el("strong", {}, [Formato.numero(valorCategoria(r), categoria === "consistencia" ? 0 : 2)]),
+      ]))),
+    ]);
+    this.pintar(cabecera, lideres, UI.tarjeta(`Ranking · ${selectorCategoria.options[selectorCategoria.selectedIndex]?.text || "Forma"}`, [tabla, UI.el("p", { class: "nota" }, ["La posición responde a la categoría elegida. La consistencia penaliza la variación de goles entre partidos."])]));
   },
 
   /** Cabecera del duelo: escudo, nombre y forma de cada lado, con el
@@ -676,6 +799,9 @@ const Vistas = {
   /** Dos columnas con los ultimos partidos de cada equipo. */
   detallePorEquipo(ladoA, ladoB) {
     const columna = (datos, letra) => {
+      const numero = (valor, destacado = false) => UI.el("td", { class: destacado ? "num destacado" : "num" }, [
+        Number.isFinite(valor) ? String(valor) : "–",
+      ]);
       const crearFila = (p) => UI.el("tr", {}, [
         UI.el("td", { class: "tenue" }, [Formato.fechaCorta(p.fecha)]),
         UI.celdaSede(p.enCasa),
@@ -684,11 +810,13 @@ const Vistas = {
         UI.celdaResultado(p.resultado),
         UI.el("td", { class: "num destacado" }, [`${p.golesFavor}-${p.golesContra}`]),
         UI.el("td", { class: "num" }, [p.cornersFavor === null ? "–" : `${p.cornersFavor}-${p.cornersContra}`]),
+        numero(p.tiros),
+        numero(p.tirosPuerta, true),
       ]);
       return UI.el("div", { class: "tarjeta columna-equipo" }, [
         UI.el("h3", {}, [UI.el("span", { class: `punto ${letra}` }), datos.equipo.displayName]),
         UI.tablaPaginada(
-          ["Fecha", "Sede", "Rival", "Competición", "Res", { texto: "Goles", num: true }, { texto: "Córners", num: true }],
+          ["Fecha", "Sede", "Rival", "Competición", "Res", { texto: "Goles", num: true }, { texto: "Córners", num: true }, { texto: "Tiros", num: true }, { texto: "A puerta", num: true }],
           datos.filas,
           crearFila,
           { clase: "mini-tabla", porPagina: 5, etiqueta: "partidos" },

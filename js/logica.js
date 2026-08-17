@@ -466,6 +466,41 @@ const Logica = {
     };
   },
 
+  ventanasSerie(filas, selector, linea = null, ventanas = [5, 10, 20]) {
+    const tamanios = [...new Set(ventanas.map((n) => Math.min(n, filas.length)).filter((n) => n >= 3))];
+    return tamanios.map((n) => ({
+      ventana: n,
+      analisis: this.analizarSerie(filas.slice(0, n), selector, linea),
+    })).filter((x) => x.analisis);
+  },
+
+  mediaMovil(filas, selector, ventana = 5) {
+    const cronologico = [...filas].reverse();
+    return cronologico.map((fila, indice) => {
+      const tramo = cronologico.slice(Math.max(0, indice - ventana + 1), indice + 1);
+      const valores = tramo.map(selector).filter(Number.isFinite);
+      return { fecha: fila.fecha, valor: valores.length ? valores.reduce((s, v) => s + v, 0) / valores.length : null };
+    }).filter((x) => x.valor !== null);
+  },
+
+  intervaloHabitual(filas, selector) {
+    const analisis = this.analizarSerie(filas, selector);
+    if (!analisis) return null;
+    return {
+      centro: analisis.media,
+      inferior: Math.max(0, analisis.media - analisis.desviacion),
+      superior: analisis.media + analisis.desviacion,
+      volatilidad: analisis.volatilidad,
+    };
+  },
+
+  matrizLineas(filas, clave, lineas) {
+    return filas.map((fila) => ({
+      fila,
+      cumple: lineas.map((linea) => Number.isFinite(fila[clave]) && fila[clave] > linea),
+    }));
+  },
+
   /** Determina si dos rachas viven en un contexto comparable. Una competición
       compartida es el puente más fuerte; rivales comunes y H2H conectan
       muestras de ligas distintas sin asignar ratings inventados a cada liga. */
@@ -638,7 +673,7 @@ const Logica = {
 
   /** Ranking de forma dentro de una competicion. Cada equipo aporta solamente
       sus N partidos mas recientes para que calendarios desiguales sean comparables. */
-  rankingCompeticion(datos, limite = 10) {
+  rankingCompeticion(datos, limite = 10, categoria = "forma") {
     if (!datos?.partidos) return [];
     const porEquipo = new Map();
     const agregar = (partido, propio, rival, enCasa) => {
@@ -671,17 +706,27 @@ const Logica = {
       const gf = muestra.reduce((s, f) => s + f.golesFavor, 0);
       const gc = muestra.reduce((s, f) => s + f.golesContra, 0);
       const conCorners = muestra.filter((f) => Number.isFinite(f.cornersFavor) && Number.isFinite(f.cornersContra));
+      const valoresGoles = muestra.map((f) => f.golesFavor);
+      const mediaGoles = gf / Math.max(1, muestra.length);
+      const desviacionGoles = Math.sqrt(valoresGoles.reduce((s, v) => s + (v - mediaGoles) ** 2, 0) / Math.max(1, valoresGoles.length));
       return {
         id: String(equipo.id), nombre: equipo.nombre, abreviatura: equipo.abreviatura, escudo: equipo.escudo,
         pj: muestra.length, v, e, d: muestra.length - v - e, puntos: v * 3 + e,
         ppp: muestra.length ? (v * 3 + e) / muestra.length : 0, gf, gc, dg: gf - gc,
         corners: promedio(muestra, (f) => f.cornersFavor), tiros: promedio(muestra, (f) => f.tiros),
         tirosPuerta: promedio(muestra, (f) => f.tirosPuerta),
+        consistencia: Math.max(0, 100 - desviacionGoles * 30),
         over25: muestra.length ? muestra.filter((f) => f.golesFavor + f.golesContra > 2.5).length * 100 / muestra.length : 0,
         over95Corners: conCorners.length ? conCorners.filter((f) => f.cornersFavor + f.cornersContra > 9.5).length * 100 / conCorners.length : null,
       };
     }).filter((fila) => fila.pj >= Math.min(3, limite))
-      .sort((a, b) => b.ppp - a.ppp || b.dg / b.pj - a.dg / a.pj || b.gf - a.gf)
+      .sort((a, b) => {
+        const valor = (fila) => ({
+          forma: fila.ppp, ataque: fila.gf / fila.pj, defensa: -fila.gc / fila.pj,
+          tiros: fila.tiros ?? -1, corners: fila.corners ?? -1, consistencia: fila.consistencia,
+        })[categoria] ?? fila.ppp;
+        return valor(b) - valor(a) || b.dg / b.pj - a.dg / a.pj;
+      })
       .map((fila, indice) => ({ ...fila, posicion: indice + 1 }));
   },
 
@@ -713,7 +758,56 @@ const Logica = {
     const mejor = candidatos.sort((x, y) => y.probabilidad - x.probabilidad)[0] || null;
     const cobertura = Math.min(1, Math.min(a.length, b.length) / muestra);
     const confianza = cobertura >= 0.8 ? "alta" : cobertura >= 0.5 ? "media" : "baja";
-    return { ...proyeccion, mejor, confianza, muestraA: a.length, muestraB: b.length };
+    const selectorMercado = (mercado) => mercado === "Más de 2,5 goles"
+      ? [(f) => f.golesFavor + f.golesContra, 2.5]
+      : mercado === "Más de 9,5 córners"
+        ? [(f) => Number.isFinite(f.cornersFavor) && Number.isFinite(f.cornersContra) ? f.cornersFavor + f.cornersContra : NaN, 9.5]
+        : mercado === "Ambos marcan" ? [(f) => f.golesFavor > 0 && f.golesContra > 0 ? 1 : 0, 0.5] : null;
+    let detalle = null;
+    if (mejor) {
+      const definicion = selectorMercado(mejor.mercado);
+      const tasas = (filas, n) => definicion ? this.analizarSerie(filas.slice(0, n), definicion[0], definicion[1])?.cumplimiento?.porcentaje ?? null : null;
+      const maximoComun = Math.min(filasA.length, filasB.length);
+      const tamanios = [...new Set([5, 10, 20, Math.min(muestra, maximoComun)].filter((n) => n >= 3 && n <= maximoComun))].sort((x, y) => x - y);
+      const ventanas = tamanios.map((n) => {
+        const pa = tasas(filasA, n);
+        const pb = tasas(filasB, n);
+        return { n, a: pa, b: pb, combinado: pa === null ? pb : pb === null ? pa : (pa + pb) / 2 };
+      });
+      const validas = ventanas.map((v) => v.combinado).filter(Number.isFinite);
+      const estabilidad = validas.length > 1 ? Math.max(0, 100 - (Math.max(...validas) - Math.min(...validas))) : 50;
+      const actual = ventanas.find((v) => v.n === Math.min(muestra, filasA.length, filasB.length)) || ventanas.at(-1);
+      const diferencia = actual && Number.isFinite(actual.a) && Number.isFinite(actual.b) ? Math.abs(actual.a - actual.b) : null;
+      const calidad = mejor.probabilidad * cobertura * (0.5 + estabilidad / 200);
+      detalle = {
+        ventanas, estabilidad, calidad,
+        consenso: diferencia === null ? "sin comparación" : diferencia <= 15 ? "alto" : diferencia <= 30 ? "moderado" : "bajo",
+        contradiccion: diferencia !== null && diferencia > 35,
+      };
+    }
+    let distribucionGoles = null;
+    if (proyeccion.resultado) {
+      const lambdaA = proyeccion.resultado.lambdaA;
+      const lambdaB = proyeccion.resultado.lambdaB;
+      const poisson = (lambda, k) => Math.exp(-lambda) * (lambda ** k) / Array.from({ length: k }, (_, i) => i + 1).reduce((p, v) => p * v, 1);
+      const marcadores = [];
+      const totales = Array(7).fill(0);
+      for (let ga = 0; ga <= 6; ga++) for (let gb = 0; gb <= 6; gb++) {
+        const probabilidad = poisson(lambdaA, ga) * poisson(lambdaB, gb) * 100;
+        marcadores.push({ marcador: `${ga}-${gb}`, probabilidad });
+        totales[Math.min(6, ga + gb)] += probabilidad;
+      }
+      const acumulada = [];
+      let suma = 0;
+      totales.forEach((p, i) => { suma += p; acumulada.push({ goles: i, acumulada: suma }); });
+      const cuantil = (pct) => (acumulada.find((x) => x.acumulada >= pct)?.goles ?? 6);
+      distribucionGoles = {
+        marcadores: marcadores.sort((x, y) => y.probabilidad - x.probabilidad).slice(0, 5),
+        totales: totales.map((probabilidad, goles) => ({ goles: goles === 6 ? "6+" : String(goles), probabilidad })),
+        rango: `${cuantil(10)}–${cuantil(90)}`,
+      };
+    }
+    return { ...proyeccion, mejor, confianza, muestraA: a.length, muestraB: b.length, detalle, distribucionGoles };
   },
 
   /** Perfil completo de un equipo sobre los partidos dados. */
@@ -733,6 +827,7 @@ const Logica = {
       cornersFavor: this.media(filas, "cornersFavor"),
       cornersContra: this.media(filas, "cornersContra"),
       tiros: this.media(filas, "tiros"),
+      tirosContra: this.media(filas, "tirosContra"),
       tirosPuerta: this.media(filas, "tirosPuerta"),
       posesion: this.media(filas, "posesion"),
       porteriasCero: cuenta((f) => f.golesContra === 0),

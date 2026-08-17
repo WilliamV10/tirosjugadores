@@ -51,17 +51,6 @@ const Datos = {
     return { listas: acumulado, tramosUsados, origen: "espn" };
   },
 
-  /** Las actuaciones todavía proceden del gamelog vivo de ESPN. */
-  async partidosDeJugador(jugador) {
-    const base = await Api.gamelog(jugador.id, null);
-    if (!base) return null;
-    const { porDefecto, otras } = Logica.ligasDelClub(base);
-    const pendientes = [...new Set([...otras, ...CONFIG.ligasSeleccion])]
-      .filter((liga) => liga !== porDefecto);
-    const respuestas = await Promise.all(pendientes.map((liga) => Api.gamelog(jugador.id, liga)));
-    return Logica.combinar([base, ...respuestas].map((datos) => Logica.parsearPartidos(datos)));
-  },
-
   /** Detalle sin persistencia: eventos, jugadores y actuaciones desde ESPN. */
   async detalleDePartido(partido) {
     const resumen = await Api.resumenPartido(partido.ligaSlug, partido.eventId);

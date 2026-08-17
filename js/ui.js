@@ -323,16 +323,64 @@ const UI = {
     return this.el("td", {}, [this.el("span", { class: `chip ${res.clase}`, title: res.nombre }, [res.texto])]);
   },
 
+  valorOrdenacion(texto) {
+    const limpio = String(texto ?? "").trim().replace(/\s+/g, " ");
+    if (/^-?\d+(?:[.,]\d+)?%?$/.test(limpio)) {
+      return { tipo: "numero", valor: Number(limpio.replace("%", "").replace(",", ".")) };
+    }
+    return { tipo: "texto", valor: limpio };
+  },
+
+  compararCeldas(a, b, direccion = 1) {
+    const va = this.valorOrdenacion(a);
+    const vb = this.valorOrdenacion(b);
+    if (va.tipo === "numero" && vb.tipo === "numero") return (va.valor - vb.valor) * direccion;
+    return va.valor.localeCompare(vb.valor, "es", { numeric: true, sensitivity: "base" }) * direccion;
+  },
+
+  activarOrdenTabla(cabeceras, obtenerFilas, aplicarFilas) {
+    let columnaActiva = -1;
+    let direccion = 1;
+    cabeceras.forEach((th, indice) => {
+      const etiqueta = th.textContent;
+      th.classList.add("ordenable");
+      th.tabIndex = 0;
+      th.setAttribute("role", "button");
+      th.setAttribute("aria-label", `Ordenar por ${etiqueta}`);
+      const ordenar = () => {
+        direccion = columnaActiva === indice ? -direccion : 1;
+        columnaActiva = indice;
+        for (const otro of cabeceras) {
+          otro.classList.remove("orden-asc", "orden-desc");
+          otro.removeAttribute("aria-sort");
+        }
+        th.classList.add(direccion === 1 ? "orden-asc" : "orden-desc");
+        th.setAttribute("aria-sort", direccion === 1 ? "ascending" : "descending");
+        aplicarFilas(indice, direccion, obtenerFilas());
+      };
+      th.addEventListener("click", ordenar);
+      th.addEventListener("keydown", (evento) => {
+        if (evento.key === "Enter" || evento.key === " ") { evento.preventDefault(); ordenar(); }
+      });
+    });
+  },
+
   /** Tabla completa: cabeceras (texto o {texto, num:true}) + filas ya creadas. */
   tabla(cabeceras, filas, { clase = "" } = {}) {
-    const encabezado = this.el("tr", {}, cabeceras.map((c) => {
+    const celdasCabecera = cabeceras.map((c) => {
       const { texto, num } = typeof c === "string" ? { texto: c, num: false } : c;
       return this.el("th", num ? { class: "num" } : {}, [texto]);
-    }));
+    });
+    const encabezado = this.el("tr", {}, celdasCabecera);
+    const cuerpo = this.el("tbody", {}, filas);
+    this.activarOrdenTabla(celdasCabecera, () => [...cuerpo.children], (indice, direccion, actuales) => {
+      actuales.sort((a, b) => this.compararCeldas(a.children[indice]?.textContent, b.children[indice]?.textContent, direccion));
+      cuerpo.replaceChildren(...actuales);
+    });
     return this.el("div", { class: "tabla-envoltura" }, [
       this.el("table", clase ? { class: clase } : {}, [
         this.el("thead", {}, [encabezado]),
-        this.el("tbody", {}, filas),
+        cuerpo,
       ]),
     ]);
   },
@@ -340,10 +388,12 @@ const UI = {
   /** Tabla paginada reutilizable. Recibe los datos originales y una fábrica
       de filas para crear únicamente los nodos visibles de cada página. */
   tablaPaginada(cabeceras, datos, crearFila, { clase = "", porPagina = 5, etiqueta = "registros" } = {}) {
-    const encabezado = this.el("tr", {}, cabeceras.map((c) => {
+    const celdasCabecera = cabeceras.map((c) => {
       const { texto, num } = typeof c === "string" ? { texto: c, num: false } : c;
       return this.el("th", num ? { class: "num" } : {}, [texto]);
-    }));
+    });
+    const encabezado = this.el("tr", {}, celdasCabecera);
+    let datosOrdenados = [...datos];
     const cuerpo = this.el("tbody");
     const tabla = this.el("div", { class: "tabla-envoltura" }, [
       this.el("table", clase ? { class: clase } : {}, [this.el("thead", {}, [encabezado]), cuerpo]),
@@ -360,7 +410,7 @@ const UI = {
     const render = () => {
       const inicio = pagina * porPagina;
       const fin = Math.min(inicio + porPagina, datos.length);
-      cuerpo.replaceChildren(...datos.slice(inicio, fin).map(crearFila));
+      cuerpo.replaceChildren(...datosOrdenados.slice(inicio, fin).map(crearFila));
       informacion.textContent = datos.length ? `${inicio + 1}–${fin} de ${datos.length} ${etiqueta}` : `0 ${etiqueta}`;
       anterior.disabled = pagina === 0;
       siguiente.disabled = pagina >= totalPaginas - 1;
@@ -375,6 +425,15 @@ const UI = {
         return boton;
       }));
     };
+    this.activarOrdenTabla(celdasCabecera, () => datosOrdenados, (indice, direccion, actuales) => {
+      datosOrdenados = [...actuales].sort((a, b) => {
+        const filaA = crearFila(a);
+        const filaB = crearFila(b);
+        return this.compararCeldas(filaA.children[indice]?.textContent, filaB.children[indice]?.textContent, direccion);
+      });
+      pagina = 0;
+      render();
+    });
     anterior.addEventListener("click", () => { if (pagina > 0) { pagina--; render(); } });
     siguiente.addEventListener("click", () => { if (pagina < totalPaginas - 1) { pagina++; render(); } });
     const navegacion = this.el("nav", { class: "paginador", "aria-label": `Paginación de ${etiqueta}` }, [

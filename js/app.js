@@ -75,7 +75,7 @@ const App = {
     else this.render(); // si ya hay datos en cache para este modo, se pintan directamente
   },
 
-  async cargarRankings(slug = null, limite = 10) {
+  async cargarRankings(slug = null, limite = 10, categoria = null) {
     const indice = await FuenteLocal.indice();
     if (!indice) {
       UI.mostrarEstado("No se encontró el índice JSON publicado.", { error: true });
@@ -85,12 +85,13 @@ const App = {
       .map(([clave, dato]) => ({ slug: clave, nombre: dato.nombre || clave }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
     const elegido = slug || this.estado.rankings?.slug || (competiciones.some((c) => c.slug === "mex.1") ? "mex.1" : competiciones[0]?.slug);
-    this.estado.rankings = { competiciones, slug: elegido, limite, filas: [], cargando: true };
+    const categoriaElegida = categoria || this.estado.rankings?.categoria || "forma";
+    this.estado.rankings = { competiciones, slug: elegido, limite, categoria: categoriaElegida, filas: [], cargando: true };
     this.render();
     const datos = await FuenteLocal.datosCompeticion(elegido);
     this.estado.rankings = {
-      competiciones, slug: elegido, limite,
-      filas: Logica.rankingCompeticion(datos, limite), cargando: false,
+      competiciones, slug: elegido, limite, categoria: categoriaElegida,
+      filas: Logica.rankingCompeticion(datos, limite, categoriaElegida), cargando: false,
     };
     this.render();
   },
@@ -98,10 +99,12 @@ const App = {
   async generarRadar(ligaId = "todas") {
     const fecha = this.fechaLocalYmd(this.estado.agendaDia);
     const ligas = (this.estado.agenda || []).filter((liga) => ligaId === "todas" || liga.id === ligaId);
-    this.estado.radar[fecha] = { cargando: true, resultados: this.estado.radar[fecha]?.resultados || {} };
+    // Cada ejecución representa exactamente el filtro actual. No conservar
+    // resultados de la competición analizada anteriormente.
+    this.estado.radar[fecha] = { cargando: true, resultados: {} };
     this.render();
     const muestra = Number(UI.refs.selector().value) || 10;
-    const resultados = { ...this.estado.radar[fecha].resultados };
+    const resultados = {};
     await Promise.all(ligas.flatMap((liga) => liga.partidos.map(async (partido) => {
       const [filasA, filasB] = await Promise.all([
         FuenteLocal.partidosDeEquipo(partido.local.id),
@@ -305,7 +308,7 @@ const App = {
     UI.mostrarEstado(`Descargando partidos de ${candidato.displayName}…`, { cargando: true });
     try {
       const jugador = { id, nombre: candidato.displayName, idEquipo: null };
-      const { resultado: filas, peticiones, fallos } = await this.midiendo(() => Datos.partidosDeJugador(jugador));
+      const { resultado: filas, peticiones, fallos } = await this.midiendo(() => DatosJugadores.partidos(jugador));
       if (!filas) {
         this.avisarVacio(fallos, "ESPN no tiene partidos registrados para este jugador.");
         return;
@@ -315,7 +318,7 @@ const App = {
         return;
       }
       this.estado.jugador = { candidato, id, filas };
-      this.anunciarCoste(filas.length, peticiones, resultado.origen);
+      this.anunciarCoste(filas.length, peticiones, "espn");
       this.render();
     } catch (error) {
       UI.limpiar();
@@ -575,7 +578,7 @@ const App = {
         },
       );
     } else if (modo === "rankings" && this.estado.rankings) {
-      Vistas.rankings(this.estado.rankings, (slug, limite) => this.cargarRankings(slug, limite));
+      Vistas.rankings(this.estado.rankings, (slug, limite, categoria) => this.cargarRankings(slug, limite, categoria));
     }
   },
 };
